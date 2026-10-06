@@ -69,6 +69,7 @@ The people watching should be able to see the participant physically experimenti
 |layout-starting.png|a guideline for the starting layout|the overall idea and centering/ layout|the rough lines and writing|
 |layout-after-tilt.png|a guideline for how the image will display once revealed|the overall idea and centering/ layout and the mask|the rough lines and text and diagonal lines (will be replaced with the photo - minion.jpg)|
 | layout-after-shake.png | a guideline for the animation and text display after an aggressive shake. | the layout and idea as well as text wording | rough lines and writing |
+|real-bubble-refrence.webp| inspiration for what the bubble should look like | the colourful shadows, subtle reflection, and contrast against the dark background |the exact colouring of the bubble itself, i want more of a dark blue/ teal as the base|
 
 
 ## Limits
