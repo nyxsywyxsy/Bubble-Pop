@@ -116,7 +116,75 @@ The people watching should be able to see the participant physically experimenti
   - Record what participants find interesting or unusual.
 
 ## Steps
+Step 1 — Inspect the existing sketch.js
 
+Before changing anything, I want to work from your actual current code, rather than replacing your existing setup with something unrelated.
+
+Step 2 — Get the basic visual experience working
+
+We'll make sure:
+
+phone-sized canvas
+blue transparent bubble
+bubble fills the screen appropriately
+hidden Minion
+“reveal what's hidden”
+initial state matches your starting reference
+Step 3 — Add phone tilt
+
+We'll make the actual phone orientation control the Minion's opacity.
+
+Something conceptually like:
+
+small tilt
+→ 10% visible
+→ 20%
+→ 30%
+→ 50%
+→ 70%
+
+rather than simply having the image appear when someone moves.
+
+Step 4 — Add the second layer of tilt
+
+Once the reveal works, we'll use stronger tilt to transition into:
+
+visible → distorted → glitching → dispersed
+
+This is important because it makes the interaction feel like the same physical action has consequences, rather than having a collection of unrelated gestures.
+
+Step 5 — Add shake detection
+
+We'll distinguish a normal movement from an intentional/aggressive shake.
+
+Then:
+
+shake → bubble pop → Minion disappears → aftermath
+
+Step 6 — Add tap/contribution
+
+Only once the main physical interaction works, we'll add:
+
+tap → contribution screen → drawing → submit → confirmation
+
+If drawing becomes a technical problem, we'll use the text fallback exactly as your plan says.
+
+Step 7 — Make the phone experience reliable
+
+We'll then test:
+
+iPhone/Android behaviour
+screen dimensions
+sensor permission
+orientation
+touch
+shake sensitivity
+accidental triggers
+whether the instruction is readable
+whether the bubble remains visually clear
+Step 8 — Testing setup
+
+Finally we'll make sure the person watching you can actually see the bubble responding to the participant's physical movement, because your rubric specifically cares about the room being able to read the interaction.
 
 ## Changes
 
