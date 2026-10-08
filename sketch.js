@@ -1,6 +1,7 @@
 let minion = null;
 let imageReady = false;
 
+
 // --------------------------------
 // INTERACTION STATE
 // --------------------------------
@@ -21,7 +22,6 @@ let droplets = [];
 // --------------------------------
 
 let distortionLevel = 0;
-
 let lastFrameTime = 0;
 
 
@@ -45,13 +45,15 @@ let drawingPoints = [];
 
 
 // --------------------------------
-// DRAWING WAVE
+// FINAL BUBBLE WAVE
 // --------------------------------
 
-let waveStartTime = 0;
-let waveDuration = 5000;
+let finalBubbles = [];
 
-let waveCopies = [];
+let finalBubbleStartTime = 0;
+let finalBubbleDuration = 6000;
+
+let finalBubbleCount = 45;
 
 
 // --------------------------------
@@ -59,29 +61,29 @@ let waveCopies = [];
 // --------------------------------
 
 async function setup() {
-
   createCanvas(windowWidth, windowHeight);
 
   lockGestures();
 
-  enableGyroTap('Tap to enable motion sensors');
+  if (location.protocol === "https:" && window.self === window.top) {
+    showDesktopQr();
+  }
 
-  // Very strong shake required
-  setShakeThreshold(110);
+  enableGyroTap("Tap to enable motion sensors");
 
   angleMode(DEGREES);
 
   imageMode(CENTER);
+
+  setShakeThreshold(110);
+
+  lastFrameTime = millis();
 
   minion = await loadImage(
     "https://nyxsywyxsy.github.io/Bubble-Pop/minion.jpg"
   );
 
   imageReady = true;
-
-  lastFrameTime = millis();
-
-  console.log("MINION LOADED");
 }
 
 
@@ -93,363 +95,285 @@ function draw() {
 
   background(0);
 
-  let bubbleX = width / 2;
-  let bubbleY = height / 2;
-
-  let bubbleSize =
-    min(width, height) * 0.62;
-
-
-  // --------------------------------
-  // FRAME TIME
-  // --------------------------------
-
   let currentTime = millis();
-
-  let deltaTime =
-    currentTime - lastFrameTime;
-
+  let deltaTime = currentTime - lastFrameTime;
   lastFrameTime = currentTime;
 
 
   // --------------------------------
-  // GET TILT
-  // --------------------------------
-
-  let tilt = 0;
-
-  if (window.sensorsEnabled) {
-
-    tilt = abs(rotationX);
-
-    tilt = constrain(
-      tilt,
-      0,
-      90
-    );
-  }
-
-
-  // --------------------------------
-  // GRADUAL REVEAL
-  // --------------------------------
-
-  let revealAmount = map(
-    tilt,
-    5,
-    60,
-    0,
-    255
-  );
-
-  revealAmount = constrain(
-    revealAmount,
-    0,
-    255
-  );
-
-
-  // --------------------------------
-  // TIME-BASED DISTORTION
-  // --------------------------------
-
-  if (
-    tilt >= 88 &&
-    !bubblePopped &&
-    !popStarted
-  ) {
-
-    distortionLevel +=
-      0.00035 *
-      deltaTime;
-
-  } else if (tilt < 84) {
-
-    distortionLevel -=
-      0.00045 *
-      deltaTime;
-  }
-
-
-  distortionLevel = constrain(
-    distortionLevel,
-    0,
-    1
-  );
-
-
-  // --------------------------------
-  // BUBBLE
+  // BEFORE BUBBLE POP
   // --------------------------------
 
   if (!bubblePopped) {
 
-    drawBubble(
-      bubbleX,
-      bubbleY,
-      bubbleSize
+    let tilt = 0;
+
+    if (window.sensorsEnabled) {
+      tilt = abs(rotationX);
+      tilt = constrain(tilt, 0, 90);
+    }
+
+
+    // --------------------------------
+    // REVEAL
+    // --------------------------------
+
+    let revealAmount = map(
+      tilt,
+      5,
+      60,
+      0,
+      255
+    );
+
+    revealAmount = constrain(
+      revealAmount,
+      0,
+      255
     );
 
 
     // --------------------------------
-    // MINION
+    // SLOW DISTORTION
     // --------------------------------
 
     if (
-      !popStarted &&
-      imageReady &&
-      minion &&
-      revealAmount > 0
+      tilt >= 88 &&
+      !bubblePopped &&
+      !popStarted
     ) {
 
-      drawMinionInsideBubble(
-        bubbleX,
-        bubbleY,
-        bubbleSize,
-        revealAmount,
+      distortionLevel +=
+        0.00035 * deltaTime;
+
+    } else if (tilt < 84) {
+
+      distortionLevel -=
+        0.00045 * deltaTime;
+    }
+
+    distortionLevel = constrain(
+      distortionLevel,
+      0,
+      1
+    );
+
+
+    // --------------------------------
+    // DRAW BUBBLE
+    // --------------------------------
+
+    drawBubble(
+      width / 2,
+      height / 2,
+      min(width, height) * 0.42,
+      revealAmount
+    );
+
+
+    // --------------------------------
+    // DRAW MINION
+    // --------------------------------
+
+    if (
+      imageReady &&
+      !popStarted
+    ) {
+
+      drawMinion(
+        width / 2,
+        height / 2,
+        revealAmount
+      );
+    }
+
+
+    // --------------------------------
+    // DISTORTION
+    // --------------------------------
+
+    if (
+      distortionLevel > 0 &&
+      !popStarted
+    ) {
+
+      drawDistortion(
         distortionLevel
       );
     }
+
+
+    // --------------------------------
+    // POP ANIMATION
+    // --------------------------------
+
+    if (popStarted) {
+
+      drawPopAnimation();
+
+      let elapsed =
+        millis() - popStartTime;
+
+      if (elapsed > popDuration) {
+
+        popStarted = false;
+        bubblePopped = true;
+      }
+    }
+
+
+    // --------------------------------
+    // STARTING TEXT
+    // --------------------------------
+
+    if (!popStarted) {
+
+      textAlign(
+        CENTER,
+        CENTER
+      );
+
+      textFont("Georgia");
+
+      textSize(
+        min(width, height) * 0.045
+      );
+
+      fill(255, 255, 255, 230);
+
+      text(
+        "reveal what's hidden.",
+        width / 2,
+        height * 0.87
+      );
+    }
+
+    return;
   }
 
 
   // --------------------------------
-  // POP
+  // BUBBLE HAS BEEN POPPED
   // --------------------------------
 
-  if (popStarted) {
+  if (
+    bubblePopped &&
+    !contributionActivated &&
+    !contributionSubmitted
+  ) {
 
-    drawPopAnimation(
-      bubbleX,
-      bubbleY,
-      bubbleSize
+    textAlign(
+      CENTER,
+      CENTER
     );
-  }
 
-
-  // --------------------------------
-  // ORIGINAL TEXT
-  // --------------------------------
-
-  textAlign(
-    CENTER,
-    CENTER
-  );
-
-  textFont("Georgia");
-
-
-  if (!bubblePopped) {
-
-    fill(
-      255,
-      255,
-      255,
-      230
-    );
+    textFont("Georgia");
 
     textSize(
       min(width, height) * 0.045
     );
 
-    text(
-      "reveal what's hidden.",
-      width / 2,
-      height * 0.10
-    );
-
-  } else if (!contributionActivated) {
-
-    // --------------------------------
-    // BUBBLE GONE SCREEN
-    // --------------------------------
-
-    fill(
-      255,
-      255,
-      255,
-      230
-    );
-
-    textSize(
-      min(width, height) * 0.045
-    );
+    fill(255);
 
     text(
       "the bubble is gone.",
       width / 2,
       height / 2
     );
+
+    return;
   }
 
 
   // --------------------------------
-  // CONTRIBUTION SCREEN
+  // CONTRIBUTION DRAWING SCREEN
   // --------------------------------
 
   if (
-    bubblePopped &&
     contributionActivated &&
     !contributionSubmitted
   ) {
 
-    if (contributionStartTime === 0) {
-
-      contributionStartTime =
-        millis();
-    }
-
-
     let elapsed =
-      millis() -
-      contributionStartTime;
-
+      millis() - contributionStartTime;
 
     contributionFade =
       constrain(
-        elapsed /
-        contributionFadeDuration,
+        elapsed / contributionFadeDuration,
         0,
         1
       );
 
-
-    drawContributionUI(
+    drawContributionScreen(
       contributionFade
     );
+
+    return;
   }
 
 
   // --------------------------------
-  // DRAWING WAVE
+  // FINAL BUBBLE EFFECT
   // --------------------------------
 
-  if (
-    contributionSubmitted
-  ) {
+  if (contributionSubmitted) {
 
-    if (waveStartTime === 0) {
+    drawFinalBubbleEffect();
 
-      waveStartTime =
-        millis();
-    }
-
-
-    let waveElapsed =
-      millis() -
-      waveStartTime;
-
-
-    drawContributionWave(
-      waveElapsed
-    );
-
-
-    // --------------------------------
-    // CONFIRMATION
-    // --------------------------------
-
-    let confirmationDelay =
-      waveDuration * 0.72;
-
-
-    if (
-      waveElapsed >
-      confirmationDelay
-    ) {
-
-      let confirmationProgress =
-        constrain(
-          (
-            waveElapsed -
-            confirmationDelay
-          ) /
-          submissionFadeDuration,
-          0,
-          1
-        );
-
-
-      drawSubmissionScreen(
-        confirmationProgress
-      );
-    }
-  }
-
-
-  // --------------------------------
-  // FINISH POP
-  // --------------------------------
-
-  if (popStarted) {
-
-    let elapsed =
-      millis() - popStartTime;
-
-    if (elapsed > popDuration) {
-
-      popStarted = false;
-
-      bubblePopped = true;
-    }
+    return;
   }
 }
 
 
-// ================================================
+// --------------------------------
 // BUBBLE
-// ================================================
+// --------------------------------
 
 function drawBubble(
-  bubbleX,
-  bubbleY,
-  bubbleSize
+  x,
+  y,
+  size,
+  revealAmount
 ) {
+
+  push();
+
+  translate(x, y);
+
+
+  // Main dark bubble
 
   noStroke();
 
   fill(
-    2,
-    15,
-    18,
-    210
+    5,
+    25,
+    35,
+    245
   );
 
   ellipse(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.88
+    0,
+    0,
+    size,
+    size
   );
 
 
+  // Cyan glow
+
   fill(
     0,
-    70,
-    75,
+    220,
+    255,
     35
   );
 
   ellipse(
-    bubbleX - bubbleSize * 0.04,
-    bubbleY - bubbleSize * 0.03,
-    bubbleSize * 0.80
-  );
-
-
-  // Cyan
-
-  fill(
-    20,
-    220,
-    240,
-    45
-  );
-
-  ellipse(
-    bubbleX - bubbleSize * 0.28,
-    bubbleY - bubbleSize * 0.12,
-    bubbleSize * 0.38,
-    bubbleSize * 0.65
+    -size * 0.18,
+    -size * 0.16,
+    size * 0.65,
+    size * 0.58
   );
 
 
@@ -457,16 +381,16 @@ function drawBubble(
 
   fill(
     170,
-    70,
+    80,
     255,
     45
   );
 
   ellipse(
-    bubbleX - bubbleSize * 0.10,
-    bubbleY - bubbleSize * 0.35,
-    bubbleSize * 0.45,
-    bubbleSize * 0.35
+    size * 0.18,
+    -size * 0.05,
+    size * 0.65,
+    size * 0.7
   );
 
 
@@ -474,16 +398,16 @@ function drawBubble(
 
   fill(
     255,
-    70,
+    80,
     180,
-    50
+    35
   );
 
   ellipse(
-    bubbleX + bubbleSize * 0.20,
-    bubbleY - bubbleSize * 0.30,
-    bubbleSize * 0.48,
-    bubbleSize * 0.35
+    0,
+    size * 0.2,
+    size * 0.75,
+    size * 0.6
   );
 
 
@@ -491,33 +415,33 @@ function drawBubble(
 
   fill(
     70,
-    150,
+    130,
     255,
-    45
+    35
   );
 
   ellipse(
-    bubbleX + bubbleSize * 0.34,
-    bubbleY,
-    bubbleSize * 0.28,
-    bubbleSize * 0.55
+    -size * 0.22,
+    size * 0.2,
+    size * 0.45,
+    size * 0.55
   );
 
 
   // Green
 
   fill(
-    80,
+    100,
     255,
     190,
-    42
+    25
   );
 
   ellipse(
-    bubbleX + bubbleSize * 0.18,
-    bubbleY + bubbleSize * 0.28,
-    bubbleSize * 0.45,
-    bubbleSize * 0.30
+    size * 0.25,
+    size * 0.2,
+    size * 0.4,
+    size * 0.45
   );
 
 
@@ -527,975 +451,526 @@ function drawBubble(
     255,
     230,
     100,
-    35
+    20
   );
 
   ellipse(
-    bubbleX - bubbleSize * 0.20,
-    bubbleY + bubbleSize * 0.30,
-    bubbleSize * 0.45,
-    bubbleSize * 0.25
+    -size * 0.1,
+    -size * 0.3,
+    size * 0.35,
+    size * 0.3
   );
 
 
-  // Outer glow
+  // Rainbow edge arcs
 
   noFill();
 
-  strokeWeight(12);
+  strokeWeight(
+    size * 0.018
+  );
 
   stroke(
-    100,
+    0,
     220,
     255,
-    25
+    150
   );
 
-  ellipse(
-    bubbleX,
-    bubbleY,
-    bubbleSize,
-    bubbleSize
+  arc(
+    0,
+    0,
+    size * 0.94,
+    size * 0.94,
+    200,
+    285
   );
 
 
-  // Rainbow edge
+  stroke(
+    160,
+    80,
+    255,
+    150
+  );
 
-  strokeWeight(5);
+  arc(
+    0,
+    0,
+    size * 0.94,
+    size * 0.94,
+    285,
+    350
+  );
+
 
   stroke(
     255,
-    100,
+    90,
     190,
-    170
+    150
   );
 
   arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 1.05,
-    PI * 1.48
-  );
-
-
-  stroke(
-    170,
-    100,
-    255,
-    170
-  );
-
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 1.48,
-    PI * 1.75
+    0,
+    0,
+    size * 0.94,
+    size * 0.94,
+    350,
+    55
   );
 
 
   stroke(
     80,
-    190,
-    255,
-    180
-  );
-
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 1.75,
-    PI * 2.05
-  );
-
-
-  stroke(
-    80,
-    240,
-    230,
-    180
-  );
-
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 2.05,
-    PI * 2.35
-  );
-
-
-  stroke(
     150,
     255,
-    180,
     150
   );
 
   arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 2.35,
-    PI * 2.60
-  );
-
-
-  stroke(
-    255,
-    230,
-    120,
-    150
-  );
-
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 2.60,
-    PI * 2.90
-  );
-
-
-  // Reflections
-
-  stroke(
-    255,
-    255,
-    255,
-    150
-  );
-
-  strokeWeight(4);
-
-  arc(
-    bubbleX - bubbleSize * 0.14,
-    bubbleY - bubbleSize * 0.13,
-    bubbleSize * 0.65,
-    bubbleSize * 0.65,
-    PI * 1.05,
-    PI * 1.45
-  );
-
-
-  stroke(
-    255,
-    255,
-    255,
-    100
-  );
-
-  strokeWeight(2);
-
-  arc(
-    bubbleX + bubbleSize * 0.13,
-    bubbleY + bubbleSize * 0.12,
-    bubbleSize * 0.70,
-    bubbleSize * 0.70,
     0,
-    HALF_PI
+    0,
+    size * 0.94,
+    size * 0.94,
+    55,
+    130
   );
 
 
-  // Reflection spots
+  stroke(
+    100,
+    255,
+    190,
+    150
+  );
+
+  arc(
+    0,
+    0,
+    size * 0.94,
+    size * 0.94,
+    130,
+    200
+  );
+
+
+  // White reflections
 
   noStroke();
 
-  fill(
-    255,
-    255,
-    255,
-    180
+  fill(255, 255, 255, 120);
+
+  ellipse(
+    -size * 0.23,
+    -size * 0.27,
+    size * 0.16,
+    size * 0.08
   );
 
   ellipse(
-    bubbleX - bubbleSize * 0.25,
-    bubbleY - bubbleSize * 0.25,
-    bubbleSize * 0.045
+    -size * 0.17,
+    -size * 0.2,
+    size * 0.07,
+    size * 0.035
+  );
+
+
+  fill(255, 255, 255, 80);
+
+  ellipse(
+    size * 0.27,
+    size * 0.28,
+    size * 0.055,
+    size * 0.055
   );
 
   ellipse(
-    bubbleX + bubbleSize * 0.27,
-    bubbleY - bubbleSize * 0.17,
-    bubbleSize * 0.035
+    size * 0.3,
+    size * 0.23,
+    size * 0.025,
+    size * 0.025
   );
 
 
-  fill(
-    255,
-    255,
-    255,
-    100
-  );
+  // Small sparkles
 
-  ellipse(
-    bubbleX - bubbleSize * 0.32,
-    bubbleY - bubbleSize * 0.03,
-    bubbleSize * 0.025
-  );
-
-
-  // Sparkles
-
-  stroke(
-    255,
-    255,
-    255,
-    170
-  );
-
-  strokeWeight(1.5);
+  fill(255, 255, 255, 180);
 
   drawSparkle(
-    bubbleX - bubbleSize * 0.39,
-    bubbleY - bubbleSize * 0.10,
-    bubbleSize * 0.025
+    -size * 0.43,
+    -size * 0.03,
+    size * 0.025
   );
 
   drawSparkle(
-    bubbleX + bubbleSize * 0.39,
-    bubbleY - bubbleSize * 0.25,
-    bubbleSize * 0.02
+    size * 0.4,
+    -size * 0.18,
+    size * 0.018
   );
 
   drawSparkle(
-    bubbleX + bubbleSize * 0.28,
-    bubbleY + bubbleSize * 0.43,
-    bubbleSize * 0.018
+    -size * 0.28,
+    size * 0.35,
+    size * 0.015
   );
-}
-
-
-// ================================================
-// MINION + SLOW DISTORTION
-// ================================================
-
-function drawMinionInsideBubble(
-  x,
-  y,
-  size,
-  opacity,
-  distortionLevel
-) {
-
-  push();
-
-  drawingContext.save();
-
-  drawingContext.beginPath();
-
-  drawingContext.arc(
-    x,
-    y,
-    size * 0.49,
-    0,
-    Math.PI * 2
-  );
-
-  drawingContext.clip();
-
-
-  let imageSize =
-    size * 0.98;
-
-
-  let intensity =
-    distortionLevel;
-
-
-  // --------------------------------
-  // NORMAL IMAGE
-  // --------------------------------
-
-  if (intensity < 0.02) {
-
-    tint(
-      255,
-      opacity
-    );
-
-    image(
-      minion,
-      x,
-      y,
-      imageSize,
-      imageSize
-    );
-
-    noTint();
-
-  } else {
-
-
-    // ========================================
-    // DEEPENING BLACKS
-    // ========================================
-
-    let blackStrength =
-      100 -
-      intensity * 45;
-
-
-    drawingContext.filter =
-      "contrast(" +
-      (
-        100 +
-        intensity * 180
-      ) +
-      "%) brightness(" +
-      blackStrength +
-      "%)";
-
-
-    tint(
-      255,
-      opacity
-    );
-
-
-    image(
-      minion,
-      x,
-      y,
-      imageSize,
-      imageSize
-    );
-
-
-    drawingContext.filter =
-      "none";
-
-
-    // ========================================
-    // SUBTLE RGB SEPARATION
-    // ========================================
-
-    let rgbShift =
-      intensity * 55;
-
-
-    if (intensity > 0.08) {
-
-      tint(
-        255,
-        255,
-        255,
-        opacity *
-        intensity *
-        0.45
-      );
-
-
-      image(
-        minion,
-        x - rgbShift,
-        y,
-        imageSize,
-        imageSize
-      );
-
-
-      tint(
-        255,
-        255,
-        255,
-        opacity *
-        intensity *
-        0.30
-      );
-
-
-      image(
-        minion,
-        x + rgbShift,
-        y,
-        imageSize,
-        imageSize
-      );
-
-
-      noTint();
-    }
-
-
-    // ========================================
-    // HORIZONTAL SLICING
-    // ========================================
-
-    let sliceCount =
-      5 +
-      floor(
-        intensity * 15
-      );
-
-
-    for (
-      let i = 0;
-      i < sliceCount;
-      i++
-    ) {
-
-      let sliceHeight =
-        imageSize /
-        sliceCount;
-
-
-      let sliceY =
-        y -
-        imageSize / 2 +
-        i * sliceHeight;
-
-
-      let direction =
-        i % 2 === 0
-          ? 1
-          : -1;
-
-
-      let shift =
-        direction *
-        intensity *
-        120;
-
-
-      if (intensity > 0.35) {
-
-        shift +=
-          random(
-            -1,
-            1
-          ) *
-          intensity *
-          50;
-      }
-
-
-      drawingContext.save();
-
-      drawingContext.beginPath();
-
-      drawingContext.rect(
-        x - imageSize,
-        sliceY,
-        imageSize * 2,
-        sliceHeight + 4
-      );
-
-      drawingContext.clip();
-
-
-      drawingContext.filter =
-        "contrast(" +
-        (
-          100 +
-          intensity * 180
-        ) +
-        "%)";
-
-
-      tint(
-        255,
-        255,
-        255,
-        opacity
-      );
-
-
-      image(
-        minion,
-        x + shift,
-        y,
-        imageSize,
-        imageSize
-      );
-
-
-      drawingContext.restore();
-    }
-
-
-    // ========================================
-    // PIXELATION
-    // ========================================
-
-    drawingContext.filter =
-      "none";
-
-
-    let pixelSize =
-      2 +
-      intensity * 28;
-
-
-    let pixelCount =
-      floor(
-        intensity * 110
-      );
-
-
-    noStroke();
-
-
-    for (
-      let i = 0;
-      i < pixelCount;
-      i++
-    ) {
-
-      let px =
-        x -
-        imageSize / 2 +
-        random(imageSize);
-
-
-      let py =
-        y -
-        imageSize / 2 +
-        random(imageSize);
-
-
-      let blockSize =
-        random(
-          pixelSize * 0.4,
-          pixelSize * 2
-        );
-
-
-      fill(
-        0,
-        0,
-        0,
-        random(
-          70,
-          230
-        )
-      );
-
-
-      rect(
-        px,
-        py,
-        blockSize,
-        blockSize
-      );
-    }
-
-
-    // ========================================
-    // MISSING BLACK SECTIONS
-    // ========================================
-
-    let missingCount =
-      floor(
-        intensity * 25
-      );
-
-
-    for (
-      let i = 0;
-      i < missingCount;
-      i++
-    ) {
-
-      let px =
-        x -
-        imageSize / 2 +
-        random(imageSize);
-
-
-      let py =
-        y -
-        imageSize / 2 +
-        random(imageSize);
-
-
-      let blockWidth =
-        random(
-          10,
-          70
-        );
-
-
-      let blockHeight =
-        random(
-          5,
-          30
-        );
-
-
-      fill(
-        0,
-        0,
-        0,
-        random(
-          100,
-          240
-        )
-      );
-
-
-      rect(
-        px,
-        py,
-        blockWidth,
-        blockHeight
-      );
-    }
-
-
-    // ========================================
-    // GHOSTING
-    // ========================================
-
-    if (intensity > 0.25) {
-
-      drawingContext.filter =
-        "contrast(" +
-        (
-          100 +
-          intensity * 200
-        ) +
-        "%)";
-
-
-      tint(
-        255,
-        255,
-        255,
-        opacity *
-        intensity *
-        0.35
-      );
-
-
-      image(
-        minion,
-        x -
-        intensity * 100,
-        y +
-        random(-8, 8),
-        imageSize,
-        imageSize
-      );
-
-
-      tint(
-        255,
-        255,
-        255,
-        opacity *
-        intensity *
-        0.30
-      );
-
-
-      image(
-        minion,
-        x +
-        intensity * 100,
-        y +
-        random(-8, 8),
-        imageSize,
-        imageSize
-      );
-
-
-      noTint();
-    }
-
-
-    // ========================================
-    // GLITCH BARS
-    // ========================================
-
-    drawingContext.filter =
-      "none";
-
-
-    let glitchCount =
-      floor(
-        intensity * 25
-      );
-
-
-    for (
-      let i = 0;
-      i < glitchCount;
-      i++
-    ) {
-
-      let barY =
-        y -
-        imageSize / 2 +
-        random(imageSize);
-
-
-      let barWidth =
-        random(
-          imageSize * 0.15,
-          imageSize * 0.9
-        );
-
-
-      let barHeight =
-        random(
-          2,
-          12
-        );
-
-
-      let barX =
-        x -
-        imageSize / 2 +
-        random(imageSize);
-
-
-      fill(
-        0,
-        0,
-        0,
-        random(
-          80,
-          220
-        )
-      );
-
-
-      rect(
-        barX,
-        barY,
-        barWidth,
-        barHeight
-      );
-    }
-  }
-
-
-  noTint();
-
-  drawingContext.filter =
-    "none";
-
-  drawingContext.restore();
 
   pop();
 }
 
 
-// ================================================
-// CONTRIBUTION UI
-// ================================================
+// --------------------------------
+// MINION
+// --------------------------------
 
-function drawContributionUI(
-  fade
+function drawMinion(
+  x,
+  y,
+  revealAmount
 ) {
 
-  let centreX =
-    width / 2;
+  if (!imageReady) {
+    return;
+  }
+
+  push();
+
+  imageMode(CENTER);
+
+  let imageSize =
+    min(width, height) * 0.27;
+
+  let alphaAmount =
+    map(
+      revealAmount,
+      0,
+      255,
+      0,
+      255
+    );
+
+  tint(
+    255,
+    alphaAmount
+  );
+
+  image(
+    minion,
+    x,
+    y,
+    imageSize,
+    imageSize
+  );
+
+  noTint();
+
+  pop();
+}
 
 
-  // --------------------------------
-  // DRAWING AREA
-  // --------------------------------
+// --------------------------------
+// DISTORTION
+// --------------------------------
 
-  let drawingWidth =
-    min(
-      width * 0.78,
-      430
+function drawDistortion(
+  level
+) {
+
+  if (!imageReady) {
+    return;
+  }
+
+  push();
+
+  let amount =
+    level * 45;
+
+  let slices =
+    floor(
+      map(
+        level,
+        0,
+        1,
+        2,
+        22
+      )
     );
 
 
-  let drawingHeight =
-    min(
-      height * 0.34,
-      260
+  // Dark sections
+
+  for (
+    let i = 0;
+    i < slices;
+    i++
+  ) {
+
+    let y =
+      random(height);
+
+    let h =
+      random(
+        2,
+        15
+      ) * level;
+
+    fill(
+      0,
+      random(
+        20,
+        100
+      )
     );
 
+    noStroke();
 
-  let drawingX =
-    centreX -
-    drawingWidth / 2;
-
-
-  let drawingY =
-    height * 0.24;
-
-
-  // --------------------------------
-  // TITLE
-  // --------------------------------
-
-  textAlign(
-    CENTER,
-    CENTER
-  );
-
-  textFont("Georgia");
-
-  textSize(
-    min(width, height) * 0.035
-  );
+    rect(
+      0,
+      y,
+      width,
+      h
+    );
+  }
 
 
-  fill(
-    255,
-    255,
-    255,
-    220 * fade
-  );
+  // Horizontal slices
+
+  for (
+    let i = 0;
+    i < slices;
+    i++
+  ) {
+
+    let y =
+      random(
+        height * 0.2,
+        height * 0.8
+      );
+
+    let h =
+      random(
+        2,
+        12
+      );
+
+    let offset =
+      random(
+        -amount,
+        amount
+      );
+
+    let sourceY =
+      constrain(
+        y,
+        0,
+        height - h
+      );
+
+    copy(
+      0,
+      sourceY,
+      width,
+      h,
+      offset,
+      sourceY,
+      width,
+      h
+    );
+  }
 
 
-  text(
-    "leave something behind.",
-    centreX,
-    height * 0.10
-  );
+  // RGB separation
 
+  if (level > 0.2) {
 
-  // --------------------------------
-  // DRAWING BOX
-  // --------------------------------
+    blendMode(ADD);
 
-  stroke(
-    255,
-    255,
-    255,
-    100 * fade
-  );
-
-  strokeWeight(1.5);
-
-  fill(
-    10,
-    15,
-    18,
-    100 * fade
-  );
-
-
-  rect(
-    drawingX,
-    drawingY,
-    drawingWidth,
-    drawingHeight,
-    18
-  );
-
-
-  // --------------------------------
-  // DRAWING
-  // --------------------------------
-
-  if (drawingPoints.length > 0) {
-
-    stroke(
+    tint(
       255,
-      255,
-      255,
-      220 * fade
+      0,
+      80,
+      45 * level
     );
 
-    strokeWeight(3);
+    image(
+      minion,
+      width / 2 - amount * 0.4,
+      height / 2,
+      min(width, height) * 0.27,
+      min(width, height) * 0.27
+    );
 
-    noFill();
+    tint(
+      0,
+      200,
+      255,
+      45 * level
+    );
 
+    image(
+      minion,
+      width / 2 + amount * 0.4,
+      height / 2,
+      min(width, height) * 0.27,
+      min(width, height) * 0.27
+    );
+
+    blendMode(BLEND);
+
+    noTint();
+  }
+
+
+  // Glitch bars
+
+  if (level > 0.35) {
 
     for (
-      let i = 1;
-      i < drawingPoints.length;
+      let i = 0;
+      i < 12 * level;
       i++
     ) {
 
-      let previous =
-        drawingPoints[i - 1];
+      let y =
+        random(height);
 
+      let w =
+        random(
+          width * 0.05,
+          width * 0.6
+        );
 
-      let current =
-        drawingPoints[i];
+      let h =
+        random(
+          2,
+          10
+        );
 
+      fill(
+        random([
+          255,
+          0,
+          180
+        ]),
+        random(
+          30,
+          100
+        )
+      );
 
-      if (
-        current.newStroke ||
-        previous.newStroke
-      ) {
-        continue;
-      }
-
-
-      line(
-        previous.x,
-        previous.y,
-        current.x,
-        current.y
+      rect(
+        random(width - w),
+        y,
+        w,
+        h
       );
     }
   }
 
 
-  // --------------------------------
-  // HELPER TEXT
-  // --------------------------------
+  // Heavy black cuts
 
-  if (
-    drawingPoints.length === 0
+  if (level > 0.65) {
+
+    for (
+      let i = 0;
+      i < 10;
+      i++
+    ) {
+
+      fill(
+        0,
+        random(
+          80,
+          200
+        )
+      );
+
+      rect(
+        random(width),
+        random(height),
+        random(
+          10,
+          100
+        ),
+        random(
+          5,
+          40
+        )
+      );
+    }
+  }
+
+  pop();
+}
+
+
+// --------------------------------
+// POP ANIMATION
+// --------------------------------
+
+function drawPopAnimation() {
+
+  let elapsed =
+    millis() - popStartTime;
+
+  let progress =
+    constrain(
+      elapsed / popDuration,
+      0,
+      1
+    );
+
+  let eased =
+    1 - pow(
+      1 - progress,
+      3
+    );
+
+
+  // Expanding rings
+
+  noFill();
+
+  strokeWeight(3);
+
+  for (
+    let i = 0;
+    i < 5;
+    i++
   ) {
 
-    noStroke();
+    let ringProgress =
+      constrain(
+        progress -
+        i * 0.08,
+        0,
+        1
+      );
 
-    fill(
+    let ringSize =
+      min(width, height) *
+      0.4 *
+      ringProgress;
+
+    stroke(
       255,
       255,
       255,
-      90 * fade
+      150 *
+      (1 - ringProgress)
     );
 
-    textSize(
-      min(width, height) * 0.025
-    );
-
-
-    text(
-      "draw something.",
-      centreX,
-      drawingY +
-      drawingHeight / 2
+    ellipse(
+      width / 2,
+      height / 2,
+      ringSize,
+      ringSize
     );
   }
 
 
-  // --------------------------------
-  // SUBMIT BUTTON
-  // --------------------------------
-
-  let buttonWidth =
-    min(
-      width * 0.55,
-      250
-    );
-
-
-  let buttonHeight =
-    48;
-
-
-  let buttonX =
-    centreX -
-    buttonWidth / 2;
-
-
-  let buttonY =
-    drawingY +
-    drawingHeight +
-    28;
-
+  // Flash
 
   noStroke();
 
@@ -1503,347 +978,135 @@ function drawContributionUI(
     255,
     255,
     255,
-    220 * fade
+    150 *
+    (1 - progress)
+  );
+
+  ellipse(
+    width / 2,
+    height / 2,
+    min(width, height) *
+    0.35 *
+    eased,
+    min(width, height) *
+    0.35 *
+    eased
   );
 
 
-  rect(
-    buttonX,
-    buttonY,
-    buttonWidth,
-    buttonHeight,
-    24
-  );
-
-
-  fill(
-    0,
-    0,
-    0,
-    230 * fade
-  );
-
-
-  textSize(
-    min(width, height) * 0.021
-  );
-
-
-  text(
-    "SUBMIT CONTRIBUTION",
-    centreX,
-    buttonY +
-    buttonHeight / 2
-  );
-}
-
-
-// ================================================
-// DRAWING WAVE
-// ================================================
-
-function drawContributionWave(
-  elapsed
-) {
-
-  if (
-    drawingPoints.length === 0
-  ) {
-    return;
-  }
-
-
-  let progress =
-    constrain(
-      elapsed /
-      waveDuration,
-      0,
-      1
-    );
-
-
-  // --------------------------------
-  // DRAWING BOUNDS
-  // --------------------------------
-
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-
+  // Droplets
 
   for (
     let i = 0;
-    i < drawingPoints.length;
+    i < droplets.length;
     i++
   ) {
 
-    let point =
-      drawingPoints[i];
+    let d =
+      droplets[i];
 
+    d.x += d.vx;
+    d.y += d.vy;
 
-    minX =
-      min(
-        minX,
-        point.x
-      );
+    d.vy += 0.025;
 
+    d.alpha *= 0.985;
 
-    maxX =
-      max(
-        maxX,
-        point.x
-      );
+    noStroke();
 
-
-    minY =
-      min(
-        minY,
-        point.y
-      );
-
-
-    maxY =
-      max(
-        maxY,
-        point.y
-      );
-  }
-
-
-  let originalWidth =
-    maxX - minX;
-
-
-  let originalHeight =
-    maxY - minY;
-
-
-  let centreX =
-    (minX + maxX) / 2;
-
-
-  let centreY =
-    (minY + maxY) / 2;
-
-
-  // --------------------------------
-  // MAKE THE DRAWING LARGE
-  // --------------------------------
-
-  let targetSize =
-    min(width, height) *
-    0.42;
-
-
-  let originalSize =
-    max(
-      originalWidth,
-      originalHeight,
-      20
+    fill(
+      d.r,
+      d.g,
+      d.b,
+      d.alpha
     );
 
-
-  let scale =
-    targetSize /
-    originalSize;
-
-
-  // --------------------------------
-  // MULTIPLE WAVES
-  // --------------------------------
-
-  let copyCount = 13;
-
-
-  for (
-    let copy = 0;
-    copy < copyCount;
-    copy++
-  ) {
-
-    let offset =
-      copy / copyCount;
-
-
-    // Each copy follows the previous one.
-
-    let copyProgress =
-      progress -
-      offset * 0.55;
-
-
-    if (
-      copyProgress < 0
-    ) {
-      continue;
-    }
-
-
-    // Move upward.
-
-    let travel =
-      copyProgress *
-      (height + targetSize * 2);
-
-
-    let waveX =
-      width / 2 +
-      sin(
-        copyProgress * 360 +
-        copy * 45
-      ) *
-      width *
-      0.24;
-
-
-    let waveY =
-      height +
-      targetSize -
-      travel;
-
-
-    // Make some copies larger.
-
-    let pulse =
-      1 +
-      sin(
-        copyProgress * 360 +
-        copy * 50
-      ) *
-      0.12;
-
-
-    let alpha =
-      180 *
-      (1 - copy * 0.035);
-
-
-    // Fade them in and out naturally.
-
-    if (
-      copyProgress < 0.12
-    ) {
-
-      alpha *=
-        copyProgress /
-        0.12;
-    }
-
-
-    if (
-      copyProgress > 0.82
-    ) {
-
-      alpha *=
-        1 -
-        (
-          copyProgress -
-          0.82
-        ) /
-        0.18;
-    }
-
-
-    push();
-
-
-    translate(
-      waveX,
-      waveY
+    ellipse(
+      d.x,
+      d.y,
+      d.size,
+      d.size
     );
-
-
-    rotate(
-      sin(
-        copyProgress * 300 +
-        copy * 40
-      ) *
-      15
-    );
-
-
-    scale(
-      scale *
-      pulse
-    );
-
-
-    translate(
-      -centreX,
-      -centreY
-    );
-
-
-    stroke(
-      255,
-      255,
-      255,
-      alpha
-    );
-
-    strokeWeight(
-      3 /
-      scale
-    );
-
-    noFill();
-
-
-    // --------------------------------
-    // RECREATE DRAWING
-    // --------------------------------
-
-    for (
-      let i = 1;
-      i < drawingPoints.length;
-      i++
-    ) {
-
-      let previous =
-        drawingPoints[i - 1];
-
-
-      let current =
-        drawingPoints[i];
-
-
-      if (
-        current.newStroke ||
-        previous.newStroke
-      ) {
-        continue;
-      }
-
-
-      line(
-        previous.x,
-        previous.y,
-        current.x,
-        current.y
-      );
-    }
-
-
-    pop();
   }
 }
 
 
-// ================================================
-// SUBMISSION SCREEN
-// ================================================
+// --------------------------------
+// CREATE POP DROPLETS
+// --------------------------------
 
-function drawSubmissionScreen(
+function createDroplets() {
+
+  droplets = [];
+
+  for (
+    let i = 0;
+    i < 20;
+    i++
+  ) {
+
+    let angle =
+      random(360);
+
+    let speed =
+      random(
+        1,
+        5
+      );
+
+    droplets.push({
+
+      x: width / 2,
+
+      y: height / 2,
+
+      vx:
+        cos(angle) *
+        speed,
+
+      vy:
+        sin(angle) *
+        speed,
+
+      size:
+        random(
+          4,
+          12
+        ),
+
+      r:
+        random(
+          100,
+          255
+        ),
+
+      g:
+        random(
+          100,
+          255
+        ),
+
+      b:
+        random(
+          180,
+          255
+        ),
+
+      alpha: 220
+    });
+  }
+}
+
+
+// --------------------------------
+// CONTRIBUTION SCREEN
+// --------------------------------
+
+function drawContributionScreen(
   fade
 ) {
 
-  let centreX =
-    width / 2;
-
-
-  let centreY =
-    height / 2;
+  background(0);
 
 
   textAlign(
@@ -1857,7 +1120,6 @@ function drawSubmissionScreen(
     min(width, height) * 0.045
   );
 
-
   fill(
     255,
     255,
@@ -1865,23 +1127,697 @@ function drawSubmissionScreen(
     230 * fade
   );
 
+  text(
+    "leave something behind.",
+    width / 2,
+    height * 0.16
+  );
+
+
+  // Drawing area
+
+  let boxWidth =
+    width * 0.78;
+
+  let boxHeight =
+    height * 0.48;
+
+  let boxX =
+    width / 2 -
+    boxWidth / 2;
+
+  let boxY =
+    height * 0.26;
+
+
+  noFill();
+
+  stroke(
+    255,
+    255,
+    255,
+    130 * fade
+  );
+
+  strokeWeight(1.5);
+
+  rect(
+    boxX,
+    boxY,
+    boxWidth,
+    boxHeight,
+    18
+  );
+
+
+  // Placeholder
+
+  if (drawingPoints.length === 0) {
+
+    noStroke();
+
+    fill(
+      255,
+      255,
+      255,
+      100 * fade
+    );
+
+    textSize(
+      min(width, height) * 0.035
+    );
+
+    text(
+      "draw something.",
+      width / 2,
+      boxY +
+      boxHeight / 2
+    );
+  }
+
+
+  // Draw user's strokes
+
+  if (
+    drawingPoints.length > 1
+  ) {
+
+    noFill();
+
+    stroke(
+      255,
+      255,
+      255,
+      230 * fade
+    );
+
+    strokeWeight(4);
+
+    strokeCap(ROUND);
+
+    for (
+      let i = 1;
+      i < drawingPoints.length;
+      i++
+    ) {
+
+      let current =
+        drawingPoints[i];
+
+      let previous =
+        drawingPoints[i - 1];
+
+
+      if (
+        current.newStroke ||
+        previous.newStroke
+      ) {
+
+        continue;
+      }
+
+
+      line(
+        previous.x,
+        previous.y,
+        current.x,
+        current.y
+      );
+    }
+  }
+
+
+  // Submit button
+
+  let buttonWidth =
+    width * 0.58;
+
+  let buttonHeight =
+    height * 0.075;
+
+  let buttonX =
+    width / 2 -
+    buttonWidth / 2;
+
+  let buttonY =
+    height * 0.82;
+
+
+  noStroke();
+
+  fill(
+    255,
+    255,
+    255,
+    220 * fade
+  );
+
+  rect(
+    buttonX,
+    buttonY,
+    buttonWidth,
+    buttonHeight,
+    30
+  );
+
+
+  fill(
+    0,
+    0,
+    0,
+    255 * fade
+  );
+
+  textSize(
+    min(width, height) * 0.027
+  );
 
   text(
-    "your contribution has been added.",
-    centreX,
-    centreY
+    "SUBMIT CONTRIBUTION",
+    width / 2,
+    buttonY +
+    buttonHeight / 2
   );
 }
 
 
-// ================================================
+// --------------------------------
+// FINAL BUBBLE EFFECT
+// --------------------------------
+
+function startFinalBubbles() {
+
+  finalBubbles = [];
+
+  for (
+    let i = 0;
+    i < finalBubbleCount;
+    i++
+  ) {
+
+    finalBubbles.push({
+
+      x:
+        random(
+          width
+        ),
+
+      y:
+        random(
+          height + 100,
+          height + 500
+        ),
+
+      size:
+        random(
+          min(width, height) * 0.04,
+          min(width, height) * 0.20
+        ),
+
+      speed:
+        random(
+          0.6,
+          2
+        ),
+
+      drift:
+        random(
+          10,
+          45
+        ),
+
+      phase:
+        random(360),
+
+      rotation:
+        random(360),
+
+      rotationSpeed:
+        random(
+          -0.5,
+          0.5
+        ),
+
+      alpha:
+        random(
+          90,
+          210
+        )
+    });
+  }
+}
+
+
+function drawFinalBubbleEffect() {
+
+  background(0);
+
+
+  let elapsed =
+    millis() -
+    finalBubbleStartTime;
+
+  let progress =
+    constrain(
+      elapsed /
+      finalBubbleDuration,
+      0,
+      1
+    );
+
+
+  // Slowly make the bubbles more visible
+
+  let bubbleAlpha =
+    constrain(
+      progress * 1.5,
+      0,
+      1
+    );
+
+
+  // Move bubbles upward
+
+  for (
+    let i = 0;
+    i < finalBubbles.length;
+    i++
+  ) {
+
+    let b =
+      finalBubbles[i];
+
+
+    b.y -= b.speed;
+
+    b.x +=
+      sin(
+        frameCount * 0.7 +
+        b.phase
+      ) *
+      0.35;
+
+    b.rotation +=
+      b.rotationSpeed;
+
+
+    // Reset bubble when it leaves screen
+
+    if (
+      b.y <
+      -b.size
+    ) {
+
+      b.y =
+        height +
+        random(
+          30,
+          200
+        );
+
+      b.x =
+        random(width);
+    }
+
+
+    drawFinalBubble(
+      b,
+      bubbleAlpha
+    );
+  }
+
+
+  // Add more bubbles over time
+
+  if (
+    progress > 0.25 &&
+    finalBubbles.length <
+      finalBubbleCount + 20
+  ) {
+
+    if (
+      frameCount % 12 === 0
+    ) {
+
+      finalBubbles.push({
+
+        x:
+          random(width),
+
+        y:
+          height +
+          random(20, 100),
+
+        size:
+          random(
+            min(width, height) * 0.04,
+            min(width, height) * 0.15
+          ),
+
+        speed:
+          random(
+            0.8,
+            2.2
+          ),
+
+        drift:
+          random(
+            10,
+            40
+          ),
+
+        phase:
+          random(360),
+
+        rotation:
+          random(360),
+
+        rotationSpeed:
+          random(
+            -0.5,
+            0.5
+          ),
+
+        alpha:
+          random(
+            100,
+            220
+          )
+      });
+    }
+  }
+
+
+  // Dark overlay so text remains readable
+
+  if (
+    progress > 0.55
+  ) {
+
+    let overlayAlpha =
+      map(
+        progress,
+        0.55,
+        1,
+        0,
+        85
+      );
+
+    noStroke();
+
+    fill(
+      0,
+      0,
+      0,
+      overlayAlpha
+    );
+
+    rect(
+      0,
+      0,
+      width,
+      height
+    );
+  }
+
+
+  // Final message
+
+  let messageFade =
+    constrain(
+      map(
+        progress,
+        0.45,
+        0.72,
+        0,
+        1
+      ),
+      0,
+      1
+    );
+
+
+  textAlign(
+    CENTER,
+    CENTER
+  );
+
+  textFont("Georgia");
+
+  textSize(
+    min(width, height) * 0.045
+  );
+
+  fill(
+    255,
+    255,
+    255,
+    245 *
+    messageFade
+  );
+
+  text(
+    "your contribution has been added.",
+    width / 2,
+    height / 2
+  );
+}
+
+
+// --------------------------------
+// INDIVIDUAL FINAL BUBBLE
+// --------------------------------
+
+function drawFinalBubble(
+  b,
+  overallAlpha
+) {
+
+  push();
+
+  translate(
+    b.x,
+    b.y
+  );
+
+  rotate(
+    b.rotation
+  );
+
+
+  let alpha =
+    b.alpha *
+    overallAlpha;
+
+
+  // Dark transparent interior
+
+  noStroke();
+
+  fill(
+    5,
+    25,
+    35,
+    150 * overallAlpha
+  );
+
+  ellipse(
+    0,
+    0,
+    b.size,
+    b.size
+  );
+
+
+  // Coloured interior glow
+
+  fill(
+    0,
+    220,
+    255,
+    25 * overallAlpha
+  );
+
+  ellipse(
+    -b.size * 0.15,
+    -b.size * 0.15,
+    b.size * 0.7,
+    b.size * 0.6
+  );
+
+
+  fill(
+    170,
+    80,
+    255,
+    25 * overallAlpha
+  );
+
+  ellipse(
+    b.size * 0.15,
+    0,
+    b.size * 0.65,
+    b.size * 0.7
+  );
+
+
+  fill(
+    255,
+    80,
+    180,
+    20 * overallAlpha
+  );
+
+  ellipse(
+    0,
+    b.size * 0.18,
+    b.size * 0.7,
+    b.size * 0.5
+  );
+
+
+  // Rainbow edge
+
+  noFill();
+
+  strokeWeight(
+    max(
+      1,
+      b.size * 0.012
+    )
+  );
+
+  stroke(
+    0,
+    220,
+    255,
+    alpha
+  );
+
+  arc(
+    0,
+    0,
+    b.size * 0.94,
+    b.size * 0.94,
+    200,
+    285
+  );
+
+
+  stroke(
+    170,
+    80,
+    255,
+    alpha
+  );
+
+  arc(
+    0,
+    0,
+    b.size * 0.94,
+    b.size * 0.94,
+    285,
+    350
+  );
+
+
+  stroke(
+    255,
+    90,
+    190,
+    alpha
+  );
+
+  arc(
+    0,
+    0,
+    b.size * 0.94,
+    b.size * 0.94,
+    350,
+    55
+  );
+
+
+  stroke(
+    80,
+    150,
+    255,
+    alpha
+  );
+
+  arc(
+    0,
+    0,
+    b.size * 0.94,
+    b.size * 0.94,
+    55,
+    130
+  );
+
+
+  stroke(
+    100,
+    255,
+    190,
+    alpha
+  );
+
+  arc(
+    0,
+    0,
+    b.size * 0.94,
+    b.size * 0.94,
+    130,
+    200
+  );
+
+
+  // Reflection
+
+  noStroke();
+
+  fill(
+    255,
+    255,
+    255,
+    120 * overallAlpha
+  );
+
+  ellipse(
+    -b.size * 0.22,
+    -b.size * 0.25,
+    b.size * 0.18,
+    b.size * 0.09
+  );
+
+
+  fill(
+    255,
+    255,
+    255,
+    70 * overallAlpha
+  );
+
+  ellipse(
+    b.size * 0.25,
+    b.size * 0.25,
+    b.size * 0.06,
+    b.size * 0.06
+  );
+
+
+  pop();
+}
+
+
+// --------------------------------
 // DRAWING INPUT
-// ================================================
+// --------------------------------
 
 function mousePressed() {
 
   // --------------------------------
-  // TAP AFTER BUBBLE POP
+  // AFTER BUBBLE POP
   // --------------------------------
 
   if (
@@ -1895,9 +1831,7 @@ function mousePressed() {
     contributionStartTime =
       millis();
 
-    console.log(
-      "CONTRIBUTION SCREEN ACTIVATED"
-    );
+    drawingPoints = [];
 
     return false;
   }
@@ -1908,104 +1842,89 @@ function mousePressed() {
   // --------------------------------
 
   if (
-    !bubblePopped ||
-    !contributionActivated ||
-    contributionSubmitted ||
-    contributionFade < 0.7
-  ) {
-    return;
-  }
-
-
-  let drawingWidth =
-    min(
-      width * 0.78,
-      430
-    );
-
-
-  let drawingHeight =
-    min(
-      height * 0.34,
-      260
-    );
-
-
-  let drawingX =
-    width / 2 -
-    drawingWidth / 2;
-
-
-  let drawingY =
-    height * 0.24;
-
-
-  // --------------------------------
-  // DRAWING AREA
-  // --------------------------------
-
-  if (
-    mouseX >= drawingX &&
-    mouseX <= drawingX + drawingWidth &&
-    mouseY >= drawingY &&
-    mouseY <= drawingY + drawingHeight
+    contributionActivated &&
+    !contributionSubmitted
   ) {
 
-    drawingPoints.push({
-      x: mouseX,
-      y: mouseY,
-      newStroke: true
-    });
+    let buttonWidth =
+      width * 0.58;
 
-    return false;
-  }
+    let buttonHeight =
+      height * 0.075;
 
+    let buttonX =
+      width / 2 -
+      buttonWidth / 2;
 
-  // --------------------------------
-  // SUBMIT BUTTON
-  // --------------------------------
-
-  let buttonWidth =
-    min(
-      width * 0.55,
-      250
-    );
+    let buttonY =
+      height * 0.82;
 
 
-  let buttonHeight =
-    48;
-
-
-  let buttonX =
-    width / 2 -
-    buttonWidth / 2;
-
-
-  let buttonY =
-    drawingY +
-    drawingHeight +
-    28;
-
-
-  if (
-    mouseX >= buttonX &&
-    mouseX <= buttonX + buttonWidth &&
-    mouseY >= buttonY &&
-    mouseY <= buttonY + buttonHeight
-  ) {
+    // Submit
 
     if (
-      drawingPoints.length > 0
+      mouseX >= buttonX &&
+      mouseX <=
+        buttonX +
+        buttonWidth &&
+      mouseY >= buttonY &&
+      mouseY <=
+        buttonY +
+        buttonHeight
     ) {
 
-      contributionSubmitted = true;
+      if (
+        drawingPoints.length > 0
+      ) {
 
-      waveStartTime =
-        millis();
+        contributionSubmitted =
+          true;
 
-      console.log(
-        "CONTRIBUTION ADDED"
-      );
+        finalBubbleStartTime =
+          millis();
+
+        startFinalBubbles();
+      }
+
+      return false;
+    }
+
+
+    // Drawing area
+
+    let boxWidth =
+      width * 0.78;
+
+    let boxHeight =
+      height * 0.48;
+
+    let boxX =
+      width / 2 -
+      boxWidth / 2;
+
+    let boxY =
+      height * 0.26;
+
+
+    if (
+      mouseX >= boxX &&
+      mouseX <=
+        boxX +
+        boxWidth &&
+      mouseY >= boxY &&
+      mouseY <=
+        boxY +
+        boxHeight
+    ) {
+
+      drawingPoints.push({
+
+        x: mouseX,
+
+        y: mouseY,
+
+        newStroke: true
+      });
     }
 
     return false;
@@ -2014,66 +1933,59 @@ function mousePressed() {
 
 
 // --------------------------------
-// CONTINUE DRAWING
+// DRAWING MOVEMENT
 // --------------------------------
 
 function mouseDragged() {
 
   if (
-    !bubblePopped ||
-    !contributionActivated ||
-    contributionSubmitted ||
-    contributionFade < 0.7
-  ) {
-    return;
-  }
-
-
-  let drawingWidth =
-    min(
-      width * 0.78,
-      430
-    );
-
-
-  let drawingHeight =
-    min(
-      height * 0.34,
-      260
-    );
-
-
-  let drawingX =
-    width / 2 -
-    drawingWidth / 2;
-
-
-  let drawingY =
-    height * 0.24;
-
-
-  if (
-    mouseX >= drawingX &&
-    mouseX <= drawingX + drawingWidth &&
-    mouseY >= drawingY &&
-    mouseY <= drawingY + drawingHeight
+    contributionActivated &&
+    !contributionSubmitted
   ) {
 
-    drawingPoints.push({
-      x: mouseX,
-      y: mouseY,
-      newStroke: false
-    });
-  }
+    let boxWidth =
+      width * 0.78;
 
+    let boxHeight =
+      height * 0.48;
+
+    let boxX =
+      width / 2 -
+      boxWidth / 2;
+
+    let boxY =
+      height * 0.26;
+
+
+    if (
+      mouseX >= boxX &&
+      mouseX <=
+        boxX +
+        boxWidth &&
+      mouseY >= boxY &&
+      mouseY <=
+        boxY +
+        boxHeight
+    ) {
+
+      drawingPoints.push({
+
+        x: mouseX,
+
+        y: mouseY,
+
+        newStroke: false
+      });
+    }
+  }
 
   return false;
 }
 
 
-// ================================================
+// --------------------------------
 // SHAKE
-// ================================================
+// --------------------------------
 
 function deviceShaken() {
 
@@ -2100,244 +2012,9 @@ function deviceShaken() {
 }
 
 
-// ================================================
-// DROPLETS
-// ================================================
-
-function createDroplets() {
-
-  droplets = [];
-
-  let centreX =
-    width / 2;
-
-  let centreY =
-    height / 2;
-
-
-  for (
-    let i = 0;
-    i < 20;
-    i++
-  ) {
-
-    let angle =
-      random(
-        0,
-        360
-      );
-
-
-    let speed =
-      random(
-        2.5,
-        7
-      );
-
-
-    droplets.push({
-
-      x: centreX,
-
-      y: centreY,
-
-      vx:
-        cos(angle) *
-        speed,
-
-      vy:
-        sin(angle) *
-        speed,
-
-      size:
-        random(
-          5,
-          14
-        ),
-
-      alpha: 230
-    });
-  }
-}
-
-
-// ================================================
-// POP ANIMATION
-// ================================================
-
-function drawPopAnimation(
-  centreX,
-  centreY,
-  bubbleSize
-) {
-
-  let elapsed =
-    millis() -
-    popStartTime;
-
-
-  let progress =
-    constrain(
-      elapsed /
-      popDuration,
-      0,
-      1
-    );
-
-
-  let ringSize =
-    bubbleSize *
-    (
-      1 +
-      progress *
-      0.65
-    );
-
-
-  let ringAlpha =
-    200 *
-    (
-      1 -
-      progress
-    );
-
-
-  noFill();
-
-  stroke(
-    180,
-    230,
-    255,
-    ringAlpha
-  );
-
-  strokeWeight(
-    6 *
-    (
-      1 -
-      progress
-    )
-  );
-
-
-  ellipse(
-    centreX,
-    centreY,
-    ringSize
-  );
-
-
-  stroke(
-    255,
-    255,
-    255,
-    ringAlpha * 0.7
-  );
-
-  strokeWeight(2);
-
-
-  ellipse(
-    centreX,
-    centreY,
-    ringSize * 0.86
-  );
-
-
-  noStroke();
-
-
-  for (
-    let i = 0;
-    i < droplets.length;
-    i++
-  ) {
-
-    let d =
-      droplets[i];
-
-
-    d.x += d.vx;
-
-    d.y += d.vy;
-
-    d.vy += 0.06;
-
-
-    d.alpha =
-      230 *
-      (
-        1 -
-        progress
-      );
-
-
-    fill(
-      180,
-      240,
-      255,
-      d.alpha
-    );
-
-
-    ellipse(
-      d.x,
-      d.y,
-      d.size
-    );
-
-
-    fill(
-      255,
-      255,
-      255,
-      d.alpha * 0.8
-    );
-
-
-    ellipse(
-      d.x -
-      d.size * 0.20,
-
-      d.y -
-      d.size * 0.20,
-
-      d.size * 0.25
-    );
-  }
-
-
-  noStroke();
-
-
-  fill(
-    255,
-    255,
-    255,
-    90 *
-    (
-      1 -
-      progress
-    )
-  );
-
-
-  ellipse(
-    centreX,
-    centreY,
-    bubbleSize *
-    0.35 *
-    (
-      1 +
-      progress
-    )
-  );
-}
-
-
-// ================================================
+// --------------------------------
 // SPARKLE
-// ================================================
+// --------------------------------
 
 function drawSparkle(
   x,
@@ -2345,56 +2022,75 @@ function drawSparkle(
   size
 ) {
 
-  line(
-    x - size,
-    y,
-    x + size,
+  push();
+
+  translate(
+    x,
     y
   );
 
+  noStroke();
 
-  line(
-    x,
-    y - size,
-    x,
-    y + size
+  fill(
+    255,
+    255,
+    255,
+    180
   );
 
+  beginShape();
 
-  line(
-    x -
-    size * 0.6,
-
-    y -
-    size * 0.6,
-
-    x +
-    size * 0.6,
-
-    y +
-    size * 0.6
+  vertex(
+    0,
+    -size
   );
 
-
-  line(
-    x +
-    size * 0.6,
-
-    y -
-    size * 0.6,
-
-    x -
-    size * 0.6,
-
-    y +
-    size * 0.6
+  vertex(
+    size * 0.25,
+    -size * 0.25
   );
+
+  vertex(
+    size,
+    0
+  );
+
+  vertex(
+    size * 0.25,
+    size * 0.25
+  );
+
+  vertex(
+    0,
+    size
+  );
+
+  vertex(
+    -size * 0.25,
+    size * 0.25
+  );
+
+  vertex(
+    -size,
+    0
+  );
+
+  vertex(
+    -size * 0.25,
+    -size * 0.25
+  );
+
+  endShape(
+    CLOSE
+  );
+
+  pop();
 }
 
 
-// ================================================
+// --------------------------------
 // RESIZE
-// ================================================
+// --------------------------------
 
 function windowResized() {
 
