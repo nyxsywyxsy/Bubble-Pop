@@ -160,19 +160,22 @@ function draw() {
 
 
     // --------------------------------
-    // DRAW BUBBLE
+    // DRAW LARGE BUBBLE
     // --------------------------------
+
+    let bubbleSize =
+      min(width, height) * 0.60;
 
     drawBubble(
       width / 2,
       height / 2,
-      min(width, height) * 0.42,
+      bubbleSize,
       revealAmount
     );
 
 
     // --------------------------------
-    // DRAW MINION
+    // DRAW MINION INSIDE BUBBLE
     // --------------------------------
 
     if (
@@ -183,7 +186,8 @@ function draw() {
       drawMinion(
         width / 2,
         height / 2,
-        revealAmount
+        revealAmount,
+        bubbleSize
       );
     }
 
@@ -198,7 +202,8 @@ function draw() {
     ) {
 
       drawDistortion(
-        distortionLevel
+        distortionLevel,
+        bubbleSize
       );
     }
 
@@ -239,7 +244,14 @@ function draw() {
         min(width, height) * 0.045
       );
 
-      fill(255, 255, 255, 230);
+      fill(
+        255,
+        255,
+        255,
+        230
+      );
+
+      // Kept at the bottom as requested
 
       text(
         "reveal what's hidden.",
@@ -338,7 +350,10 @@ function drawBubble(
 
   push();
 
-  translate(x, y);
+  translate(
+    x,
+    y
+  );
 
 
   // Main dark bubble
@@ -559,7 +574,12 @@ function drawBubble(
 
   noStroke();
 
-  fill(255, 255, 255, 120);
+  fill(
+    255,
+    255,
+    255,
+    120
+  );
 
   ellipse(
     -size * 0.23,
@@ -576,7 +596,12 @@ function drawBubble(
   );
 
 
-  fill(255, 255, 255, 80);
+  fill(
+    255,
+    255,
+    255,
+    80
+  );
 
   ellipse(
     size * 0.27,
@@ -595,7 +620,12 @@ function drawBubble(
 
   // Small sparkles
 
-  fill(255, 255, 255, 180);
+  fill(
+    255,
+    255,
+    255,
+    180
+  );
 
   drawSparkle(
     -size * 0.43,
@@ -620,13 +650,14 @@ function drawBubble(
 
 
 // --------------------------------
-// MINION
+// MINION — MASKED INSIDE BUBBLE
 // --------------------------------
 
 function drawMinion(
   x,
   y,
-  revealAmount
+  revealAmount,
+  bubbleSize
 ) {
 
   if (!imageReady) {
@@ -637,8 +668,40 @@ function drawMinion(
 
   imageMode(CENTER);
 
+
+  // The clipping circle is slightly
+  // smaller than the bubble edge so
+  // the image stays completely inside.
+
+  let maskSize =
+    bubbleSize * 0.91;
+
+
+  // Save the canvas drawing state
+
+  drawingContext.save();
+
+
+  // Create a circular clipping region
+
+  drawingContext.beginPath();
+
+  drawingContext.arc(
+    x,
+    y,
+    maskSize / 2,
+    0,
+    Math.PI * 2
+  );
+
+  drawingContext.clip();
+
+
+  // Image size
+
   let imageSize =
-    min(width, height) * 0.27;
+    min(width, height) * 0.38;
+
 
   let alphaAmount =
     map(
@@ -649,10 +712,12 @@ function drawMinion(
       255
     );
 
+
   tint(
     255,
     alphaAmount
   );
+
 
   image(
     minion,
@@ -662,7 +727,13 @@ function drawMinion(
     imageSize
   );
 
+
   noTint();
+
+
+  // Restore the normal canvas
+
+  drawingContext.restore();
 
   pop();
 }
@@ -673,7 +744,8 @@ function drawMinion(
 // --------------------------------
 
 function drawDistortion(
-  level
+  level,
+  bubbleSize
 ) {
 
   if (!imageReady) {
@@ -681,6 +753,7 @@ function drawDistortion(
   }
 
   push();
+
 
   let amount =
     level * 45;
@@ -1172,7 +1245,9 @@ function drawContributionScreen(
 
   // Placeholder
 
-  if (drawingPoints.length === 0) {
+  if (
+    drawingPoints.length === 0
+  ) {
 
     noStroke();
 
@@ -1386,7 +1461,7 @@ function drawFinalBubbleEffect() {
     );
 
 
-  // Slowly make the bubbles more visible
+  // Slowly make bubbles visible
 
   let bubbleAlpha =
     constrain(
@@ -1421,7 +1496,7 @@ function drawFinalBubbleEffect() {
       b.rotationSpeed;
 
 
-    // Reset bubble when it leaves screen
+    // Reset bubbles when they leave
 
     if (
       b.y <
@@ -1508,7 +1583,7 @@ function drawFinalBubbleEffect() {
   }
 
 
-  // Dark overlay so text remains readable
+  // Dark overlay behind final text
 
   if (
     progress > 0.55
