@@ -11,10 +11,8 @@ let popStartTime = 0;
 
 let lastShake = 0;
 
-// Slower pop animation
 let popDuration = 1500;
 
-// Droplets
 let droplets = [];
 
 
@@ -28,17 +26,15 @@ async function setup() {
 
   lockGestures();
 
-  // Phone motion permission
   enableGyroTap('Tap to enable motion sensors');
 
-  // Higher number = harder shake
+  // Very strong shake required
   setShakeThreshold(110);
 
   angleMode(DEGREES);
 
   imageMode(CENTER);
 
-  // Load Minion
   minion = await loadImage(
     "https://nyxsywyxsy.github.io/Bubble-Pop/minion.jpg"
   );
@@ -60,7 +56,8 @@ function draw() {
   let bubbleX = width / 2;
   let bubbleY = height / 2;
 
-  let bubbleSize = min(width, height) * 0.62;
+  let bubbleSize =
+    min(width, height) * 0.62;
 
 
   // --------------------------------
@@ -73,7 +70,11 @@ function draw() {
 
     tilt = abs(rotationX);
 
-    tilt = constrain(tilt, 0, 90);
+    tilt = constrain(
+      tilt,
+      0,
+      90
+    );
   }
 
 
@@ -97,46 +98,21 @@ function draw() {
 
 
   // --------------------------------
-  // DISTORTION
+  // EXTREME DISTORTION
   // --------------------------------
-
-  // Starts becoming noticeable around 35 degrees
-  // and becomes very strong near 90 degrees.
 
   let distortionAmount = map(
     tilt,
-    35,
+    40,
     90,
     0,
-    45
+    100
   );
 
   distortionAmount = constrain(
     distortionAmount,
     0,
-    45
-  );
-
-
-  // --------------------------------
-  // CONTRAST
-  // --------------------------------
-
-  // Normal image starts at 100%.
-  // At maximum tilt it becomes much higher contrast.
-
-  let contrastAmount = map(
-    tilt,
-    45,
-    90,
-    100,
-    175
-  );
-
-  contrastAmount = constrain(
-    contrastAmount,
-    100,
-    175
+    100
   );
 
 
@@ -154,11 +130,8 @@ function draw() {
 
 
     // --------------------------------
-    // MINION INSIDE BUBBLE
+    // MINION
     // --------------------------------
-
-    // The Minion disappears as soon as
-    // the bubble starts popping.
 
     if (
       !popStarted &&
@@ -172,15 +145,14 @@ function draw() {
         bubbleY,
         bubbleSize,
         revealAmount,
-        distortionAmount,
-        contrastAmount
+        distortionAmount
       );
     }
   }
 
 
   // --------------------------------
-  // POP ANIMATION
+  // POP
   // --------------------------------
 
   if (popStarted) {
@@ -197,7 +169,10 @@ function draw() {
   // TEXT
   // --------------------------------
 
-  textAlign(CENTER, CENTER);
+  textAlign(
+    CENTER,
+    CENTER
+  );
 
   textFont("Georgia");
 
@@ -250,19 +225,15 @@ function draw() {
 }
 
 
-// --------------------------------
-// DRAW BUBBLE
-// --------------------------------
+// ================================================
+// BUBBLE
+// ================================================
 
 function drawBubble(
   bubbleX,
   bubbleY,
   bubbleSize
 ) {
-
-  // --------------------------------
-  // DARK CENTRE
-  // --------------------------------
 
   noStroke();
 
@@ -280,10 +251,6 @@ function drawBubble(
   );
 
 
-  // --------------------------------
-  // SUBTLE TEAL
-  // --------------------------------
-
   fill(
     0,
     70,
@@ -298,9 +265,7 @@ function drawBubble(
   );
 
 
-  // --------------------------------
-  // IRIDESCENT FILM
-  // --------------------------------
+  // Cyan
 
   fill(
     20,
@@ -317,6 +282,8 @@ function drawBubble(
   );
 
 
+  // Purple
+
   fill(
     170,
     70,
@@ -331,6 +298,8 @@ function drawBubble(
     bubbleSize * 0.35
   );
 
+
+  // Pink
 
   fill(
     255,
@@ -347,6 +316,8 @@ function drawBubble(
   );
 
 
+  // Blue
+
   fill(
     70,
     150,
@@ -361,6 +332,8 @@ function drawBubble(
     bubbleSize * 0.55
   );
 
+
+  // Green
 
   fill(
     80,
@@ -377,6 +350,8 @@ function drawBubble(
   );
 
 
+  // Yellow
+
   fill(
     255,
     230,
@@ -392,9 +367,7 @@ function drawBubble(
   );
 
 
-  // --------------------------------
-  // OUTER GLOW
-  // --------------------------------
+  // Outer glow
 
   noFill();
 
@@ -415,9 +388,7 @@ function drawBubble(
   );
 
 
-  // --------------------------------
-  // RAINBOW EDGE
-  // --------------------------------
+  // Rainbow edge
 
   strokeWeight(5);
 
@@ -523,9 +494,7 @@ function drawBubble(
   );
 
 
-  // --------------------------------
-  // REFLECTIONS
-  // --------------------------------
+  // Reflections
 
   stroke(
     255,
@@ -565,9 +534,7 @@ function drawBubble(
   );
 
 
-  // --------------------------------
-  // REFLECTION SPOTS
-  // --------------------------------
+  // Reflection spots
 
   noStroke();
 
@@ -605,9 +572,7 @@ function drawBubble(
   );
 
 
-  // --------------------------------
-  // SPARKLES
-  // --------------------------------
+  // Sparkles
 
   stroke(
     255,
@@ -638,23 +603,23 @@ function drawBubble(
 }
 
 
-// --------------------------------
-// MINION INSIDE BUBBLE
-// --------------------------------
+// ================================================
+// MINION DISTORTION
+// ================================================
 
 function drawMinionInsideBubble(
   x,
   y,
   size,
   opacity,
-  distortion,
-  contrastAmount
+  distortion
 ) {
 
   push();
 
+
   // --------------------------------
-  // FULL BUBBLE CIRCLE MASK
+  // CIRCLE MASK
   // --------------------------------
 
   drawingContext.save();
@@ -672,75 +637,148 @@ function drawMinionInsideBubble(
   drawingContext.clip();
 
 
-  // Make Minion fill almost the entire bubble
-  let imageSize = size * 0.98;
+  let imageSize =
+    size * 0.98;
 
 
   // --------------------------------
-  // DISTORTION STRENGTH
+  // DISTORTION INTENSITY
   // --------------------------------
 
-  let distortionStrength =
-    distortion / 45;
-
-
-  // --------------------------------
-  // HIGH CONTRAST IMAGE
-  // --------------------------------
-
-  drawingContext.filter =
-    "contrast(" +
-    contrastAmount +
-    "%)";
+  let intensity =
+    distortion / 100;
 
 
   // --------------------------------
-  // EARLY DISTORTION
+  // NORMAL IMAGE
   // --------------------------------
 
-  if (distortion > 4) {
-
-    // Ghosted copies create a visual
-    // separation as the image starts breaking apart.
-
-    let ghostShift =
-      distortion * 0.8;
+  if (distortion < 12) {
 
     tint(
       255,
-      opacity * 0.20
+      opacity
     );
 
     image(
       minion,
-      x - ghostShift,
+      x,
       y,
       imageSize,
       imageSize
     );
-
-    image(
-      minion,
-      x + ghostShift,
-      y,
-      imageSize,
-      imageSize
-    );
-  }
-
-
-  // --------------------------------
-  // HORIZONTAL DISPLACED SLICES
-  // --------------------------------
-
-  if (distortion > 12) {
 
     noTint();
 
-    // The image is divided into horizontal
-    // sections that move in different directions.
+  } else {
 
-    let sliceCount = 7;
+
+    // ========================================
+    // 1. RED / BLACK CORRUPTED BASE
+    // ========================================
+
+    // Deep black layer
+
+    drawingContext.filter =
+      "contrast(190%) brightness(55%)";
+
+    tint(
+      20,
+      20,
+      20,
+      opacity
+    );
+
+    image(
+      minion,
+      x,
+      y,
+      imageSize,
+      imageSize
+    );
+
+
+    // ----------------------------------------
+    // RED CORRUPTION LAYER
+    // ----------------------------------------
+
+    drawingContext.filter =
+      "contrast(230%) brightness(75%) sepia(100%) saturate(600%) hue-rotate(315deg)";
+
+    tint(
+      255,
+      30,
+      30,
+      opacity * 0.75
+    );
+
+    image(
+      minion,
+      x,
+      y,
+      imageSize,
+      imageSize
+    );
+
+
+    // ========================================
+    // 2. EXTREME RGB SEPARATION
+    // ========================================
+
+    drawingContext.filter = "none";
+
+
+    let rgbShift =
+      10 +
+      intensity * 55;
+
+
+    // RED
+
+    tint(
+      255,
+      20,
+      20,
+      opacity * 0.55
+    );
+
+    image(
+      minion,
+      x - rgbShift,
+      y,
+      imageSize,
+      imageSize
+    );
+
+
+    // BLUE/GREEN GHOST
+
+    tint(
+      20,
+      180,
+      255,
+      opacity * 0.35
+    );
+
+    image(
+      minion,
+      x + rgbShift,
+      y,
+      imageSize,
+      imageSize
+    );
+
+
+    noTint();
+
+
+    // ========================================
+    // 3. HORIZONTAL CORRUPTION SLICES
+    // ========================================
+
+    let sliceCount =
+      14;
+
 
     for (
       let i = 0;
@@ -748,45 +786,75 @@ function drawMinionInsideBubble(
       i++
     ) {
 
+      let sliceHeight =
+        imageSize / sliceCount;
+
+
       let sliceY =
         y -
         imageSize / 2 +
-        (imageSize / sliceCount) * i;
+        i * sliceHeight;
 
-      let sliceHeight =
-        imageSize / sliceCount + 2;
+
+      // Every slice moves differently
 
       let direction =
-        (i % 2 === 0)
-        ? 1
-        : -1;
+        i % 2 === 0
+          ? 1
+          : -1;
+
+
+      let randomShift =
+        random(
+          -1,
+          1
+        ) *
+        distortion *
+        1.8;
+
 
       let shift =
         direction *
         distortion *
-        (0.4 + i * 0.12);
+        0.8 +
+        randomShift;
 
-
-      // Slight transparency makes the
-      // separation more visible.
-
-      tint(
-        255,
-        opacity * 0.90
-      );
 
       drawingContext.save();
 
       drawingContext.beginPath();
 
       drawingContext.rect(
-        x - imageSize / 2 - 60,
+        x - imageSize,
         sliceY,
-        imageSize + 120,
-        sliceHeight
+        imageSize * 2,
+        sliceHeight + 3
       );
 
       drawingContext.clip();
+
+
+      // Some slices are darker
+
+      if (i % 3 === 0) {
+
+        drawingContext.filter =
+          "contrast(300%) brightness(45%)";
+
+      } else {
+
+        drawingContext.filter =
+          "contrast(240%)";
+      }
+
+
+      tint(
+        255,
+        40,
+        40,
+        opacity
+      );
+
 
       image(
         minion,
@@ -796,32 +864,269 @@ function drawMinionInsideBubble(
         imageSize
       );
 
+
       drawingContext.restore();
+    }
+
+
+    // ========================================
+    // 4. PIXELATION
+    // ========================================
+
+    drawingContext.filter =
+      "none";
+
+
+    let pixelSize =
+      4 +
+      intensity * 22;
+
+
+    // Large blocks
+
+    noStroke();
+
+
+    for (
+      let i = 0;
+      i < 90;
+      i++
+    ) {
+
+      let px =
+        x -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let py =
+        y -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let blockSize =
+        random(
+          pixelSize * 0.5,
+          pixelSize * 2
+        );
+
+
+      // Mostly black/red corrupted pixels
+
+      let redChance =
+        random();
+
+
+      if (redChance < 0.65) {
+
+        fill(
+          170 + random(85),
+          random(0, 30),
+          random(0, 20),
+          random(
+            80,
+            220
+          )
+        );
+
+      } else {
+
+        fill(
+          0,
+          0,
+          0,
+          random(
+            100,
+            230
+          )
+        );
+      }
+
+
+      rect(
+        px,
+        py,
+        blockSize,
+        blockSize
+      );
+    }
+
+
+    // ========================================
+    // 5. MISSING BLACK SECTIONS
+    // ========================================
+
+    for (
+      let i = 0;
+      i < 18;
+      i++
+    ) {
+
+      let px =
+        x -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let py =
+        y -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let blockWidth =
+        random(
+          10,
+          60
+        );
+
+
+      let blockHeight =
+        random(
+          5,
+          25
+        );
+
+
+      fill(
+        0,
+        0,
+        0,
+        random(
+          100,
+          240
+        )
+      );
+
+
+      rect(
+        px,
+        py,
+        blockWidth,
+        blockHeight
+      );
+    }
+
+
+    // ========================================
+    // 6. EXTREME GHOSTING
+    // ========================================
+
+    if (distortion > 55) {
+
+      drawingContext.filter =
+        "contrast(300%)";
+
+
+      tint(
+        255,
+        0,
+        0,
+        opacity * 0.25
+      );
+
+
+      image(
+        minion,
+        x -
+        distortion * 1.8,
+        y +
+        random(-5, 5),
+        imageSize,
+        imageSize
+      );
+
+
+      tint(
+        255,
+        0,
+        0,
+        opacity * 0.20
+      );
+
+
+      image(
+        minion,
+        x +
+        distortion * 2.0,
+        y +
+        random(-5, 5),
+        imageSize,
+        imageSize
+      );
+
+
+      noTint();
+    }
+
+
+    // ========================================
+    // 7. GLITCH BARS
+    // ========================================
+
+    drawingContext.filter =
+      "none";
+
+
+    for (
+      let i = 0;
+      i < 14;
+      i++
+    ) {
+
+      let barY =
+        y -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let barWidth =
+        random(
+          imageSize * 0.15,
+          imageSize * 0.8
+        );
+
+
+      let barHeight =
+        random(
+          2,
+          10
+        );
+
+
+      let barX =
+        x -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      fill(
+        255,
+        random(0, 40),
+        random(0, 20),
+        random(
+          80,
+          220
+        )
+      );
+
+
+      rect(
+        barX,
+        barY,
+        barWidth,
+        barHeight
+      );
     }
   }
 
 
-  // --------------------------------
-  // MAIN IMAGE
-  // --------------------------------
-
-  tint(
-    255,
-    opacity
-  );
-
-  image(
-    minion,
-    x,
-    y,
-    imageSize,
-    imageSize
-  );
-
-
   noTint();
 
-  drawingContext.filter = "none";
+  drawingContext.filter =
+    "none";
+
 
   drawingContext.restore();
 
@@ -829,9 +1134,9 @@ function drawMinionInsideBubble(
 }
 
 
-// --------------------------------
+// ================================================
 // SHAKE
-// --------------------------------
+// ================================================
 
 function deviceShaken() {
 
@@ -841,9 +1146,6 @@ function deviceShaken() {
     !popStarted
   ) {
 
-    // Start the animation.
-    // The bubble remains visible while it pops.
-
     popStarted = true;
 
     popStartTime = millis();
@@ -852,21 +1154,27 @@ function deviceShaken() {
 
     lastShake = millis();
 
-    console.log("BUBBLE POP");
+    console.log(
+      "BUBBLE POP"
+    );
   }
 }
 
 
-// --------------------------------
-// CREATE DROPLETS
-// --------------------------------
+// ================================================
+// DROPLETS
+// ================================================
 
 function createDroplets() {
 
   droplets = [];
 
-  let centreX = width / 2;
-  let centreY = height / 2;
+  let centreX =
+    width / 2;
+
+  let centreY =
+    height / 2;
+
 
   for (
     let i = 0;
@@ -875,10 +1183,18 @@ function createDroplets() {
   ) {
 
     let angle =
-      random(0, 360);
+      random(
+        0,
+        360
+      );
+
 
     let speed =
-      random(2.5, 7);
+      random(
+        2.5,
+        7
+      );
+
 
     droplets.push({
 
@@ -886,11 +1202,19 @@ function createDroplets() {
 
       y: centreY,
 
-      vx: cos(angle) * speed,
+      vx:
+        cos(angle) *
+        speed,
 
-      vy: sin(angle) * speed,
+      vy:
+        sin(angle) *
+        speed,
 
-      size: random(5, 14),
+      size:
+        random(
+          5,
+          14
+        ),
 
       alpha: 230
     });
@@ -898,9 +1222,9 @@ function createDroplets() {
 }
 
 
-// --------------------------------
+// ================================================
 // POP ANIMATION
-// --------------------------------
+// ================================================
 
 function drawPopAnimation(
   centreX,
@@ -909,27 +1233,38 @@ function drawPopAnimation(
 ) {
 
   let elapsed =
-    millis() - popStartTime;
+    millis() -
+    popStartTime;
+
 
   let progress =
     constrain(
-      elapsed / popDuration,
+      elapsed /
+      popDuration,
       0,
       1
     );
 
 
   // --------------------------------
-  // EXPANDING BUBBLE RING
+  // EXPANDING RING
   // --------------------------------
 
   let ringSize =
     bubbleSize *
-    (1 + progress * 0.65);
+    (
+      1 +
+      progress *
+      0.65
+    );
+
 
   let ringAlpha =
     200 *
-    (1 - progress);
+    (
+      1 -
+      progress
+    );
 
 
   noFill();
@@ -942,8 +1277,13 @@ function drawPopAnimation(
   );
 
   strokeWeight(
-    6 * (1 - progress)
+    6 *
+    (
+      1 -
+      progress
+    )
   );
+
 
   ellipse(
     centreX,
@@ -965,6 +1305,7 @@ function drawPopAnimation(
 
   strokeWeight(2);
 
+
   ellipse(
     centreX,
     centreY,
@@ -977,6 +1318,7 @@ function drawPopAnimation(
   // --------------------------------
 
   noStroke();
+
 
   for (
     let i = 0;
@@ -997,7 +1339,10 @@ function drawPopAnimation(
 
     d.alpha =
       230 *
-      (1 - progress);
+      (
+        1 -
+        progress
+      );
 
 
     fill(
@@ -1007,6 +1352,7 @@ function drawPopAnimation(
       d.alpha
     );
 
+
     ellipse(
       d.x,
       d.y,
@@ -1014,7 +1360,6 @@ function drawPopAnimation(
     );
 
 
-    // Small white highlight
     fill(
       255,
       255,
@@ -1022,9 +1367,14 @@ function drawPopAnimation(
       d.alpha * 0.8
     );
 
+
     ellipse(
-      d.x - d.size * 0.20,
-      d.y - d.size * 0.20,
+      d.x -
+      d.size * 0.20,
+
+      d.y -
+      d.size * 0.20,
+
       d.size * 0.25
     );
   }
@@ -1036,26 +1386,35 @@ function drawPopAnimation(
 
   noStroke();
 
+
   fill(
     255,
     255,
     255,
-    90 * (1 - progress)
+    90 *
+    (
+      1 -
+      progress
+    )
   );
+
 
   ellipse(
     centreX,
     centreY,
     bubbleSize *
     0.35 *
-    (1 + progress)
+    (
+      1 +
+      progress
+    )
   );
 }
 
 
-// --------------------------------
-// SPARKLE FUNCTION
-// --------------------------------
+// ================================================
+// SPARKLE
+// ================================================
 
 function drawSparkle(
   x,
@@ -1070,6 +1429,7 @@ function drawSparkle(
     y
   );
 
+
   line(
     x,
     y - size,
@@ -1077,25 +1437,41 @@ function drawSparkle(
     y + size
   );
 
-  line(
-    x - size * 0.6,
-    y - size * 0.6,
-    x + size * 0.6,
-    y + size * 0.6
-  );
 
   line(
-    x + size * 0.6,
-    y - size * 0.6,
-    x - size * 0.6,
-    y + size * 0.6
+    x -
+    size * 0.6,
+
+    y -
+    size * 0.6,
+
+    x +
+    size * 0.6,
+
+    y +
+    size * 0.6
+  );
+
+
+  line(
+    x +
+    size * 0.6,
+
+    y -
+    size * 0.6,
+
+    x -
+    size * 0.6,
+
+    y +
+    size * 0.6
   );
 }
 
 
-// --------------------------------
+// ================================================
 // RESIZE
-// --------------------------------
+// ================================================
 
 function windowResized() {
 
