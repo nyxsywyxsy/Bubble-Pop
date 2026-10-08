@@ -1,7 +1,9 @@
 let minion;
 
 function preload() {
-  minion = loadImage("minion.jpg");
+  minion = loadImage(
+    "https://nyxsywyxsy.github.io/Bubble-Pop/minion.jpg"
+  );
 }
 
 function setup() {
@@ -12,7 +14,6 @@ function setup() {
 function draw() {
   background(0);
 
-  // Draw the Minion large in the middle
   image(
     minion,
     width / 2,
@@ -20,12 +21,6 @@ function draw() {
     300,
     300
   );
-
-  // Status text
-  fill(255);
-  textAlign(CENTER, CENTER);
-  textSize(24);
-  text("MINION TEST", width / 2, height * 0.15);
 }
 
 function windowResized() {
