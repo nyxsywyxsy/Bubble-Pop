@@ -1,31 +1,32 @@
 let minion = null;
 let imageReady = false;
 
-let tilted = false;
-
 
 // --------------------------------
 // SETUP
 // --------------------------------
 
-function setup() {
+async function setup() {
+
   createCanvas(windowWidth, windowHeight);
+
+  lockGestures();
+
+  // Ask for motion sensor permission
+  enableGyroTap('Tap to enable motion sensors');
+
+  angleMode(DEGREES);
+
   imageMode(CENTER);
 
-  // Load Minion image
-  loadImage(
-    "https://nyxsywyxsy.github.io/Bubble-Pop/minion.jpg",
-
-    function(img) {
-      minion = img;
-      imageReady = true;
-      console.log("MINION LOADED");
-    },
-
-    function(error) {
-      console.log("MINION FAILED TO LOAD");
-    }
+  // Load Minion
+  minion = await loadImage(
+    "https://nyxsywyxsy.github.io/Bubble-Pop/minion.jpg"
   );
+
+  imageReady = true;
+
+  console.log("MINION LOADED");
 }
 
 
@@ -65,19 +66,28 @@ function draw() {
   // MINION
   // --------------------------------
 
-  if (tilted && imageReady && minion) {
+  if (window.sensorsEnabled && imageReady && minion) {
 
-    tint(255, 255);
+    let tilt = abs(rotationX);
 
-    image(
-      minion,
-      bubbleX,
-      bubbleY,
-      bubbleSize * 0.42,
-      bubbleSize * 0.42
-    );
+    // Keep tilt between 0 and 90 degrees
+    tilt = constrain(tilt, 0, 90);
 
-    noTint();
+    // Reveal when phone is tilted more than 15 degrees
+    if (tilt > 15) {
+
+      tint(255, 255);
+
+      image(
+        minion,
+        bubbleX,
+        bubbleY,
+        bubbleSize * 0.42,
+        bubbleSize * 0.42
+      );
+
+      noTint();
+    }
   }
 
 
@@ -381,29 +391,6 @@ function draw() {
     bubbleY + bubbleSize * 0.43,
     bubbleSize * 0.018
   );
-}
-
-
-// --------------------------------
-// PHONE TILT
-// --------------------------------
-
-function deviceMoved() {
-
-  let xTilt = abs(rotationX);
-  let yTilt = abs(rotationY);
-
-  let tiltAmount = max(xTilt, yTilt);
-
-  // Tilted
-  if (tiltAmount > 15) {
-    tilted = true;
-  }
-
-  // Back to upright
-  else {
-    tilted = false;
-  }
 }
 
 
