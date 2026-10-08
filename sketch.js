@@ -61,15 +61,21 @@ let finalBubbleCount = 45;
 // --------------------------------
 
 async function setup() {
+
   createCanvas(windowWidth, windowHeight);
 
   lockGestures();
 
-  if (location.protocol === "https:" && window.self === window.top) {
+  if (
+    location.protocol === "https:" &&
+    window.self === window.top
+  ) {
     showDesktopQr();
   }
 
-  enableGyroTap("Tap to enable motion sensors");
+  enableGyroTap(
+    "Tap to enable motion sensors"
+  );
 
   angleMode(DEGREES);
 
@@ -95,9 +101,15 @@ function draw() {
 
   background(0);
 
-  let currentTime = millis();
-  let deltaTime = currentTime - lastFrameTime;
-  lastFrameTime = currentTime;
+  let currentTime =
+    millis();
+
+  let deltaTime =
+    currentTime -
+    lastFrameTime;
+
+  lastFrameTime =
+    currentTime;
 
 
   // --------------------------------
@@ -109,8 +121,16 @@ function draw() {
     let tilt = 0;
 
     if (window.sensorsEnabled) {
-      tilt = abs(rotationX);
-      tilt = constrain(tilt, 0, 90);
+
+      tilt =
+        abs(rotationX);
+
+      tilt =
+        constrain(
+          tilt,
+          0,
+          90
+        );
     }
 
 
@@ -118,19 +138,21 @@ function draw() {
     // REVEAL
     // --------------------------------
 
-    let revealAmount = map(
-      tilt,
-      5,
-      60,
-      0,
-      255
-    );
+    let revealAmount =
+      map(
+        tilt,
+        5,
+        60,
+        0,
+        255
+      );
 
-    revealAmount = constrain(
-      revealAmount,
-      0,
-      255
-    );
+    revealAmount =
+      constrain(
+        revealAmount,
+        0,
+        255
+      );
 
 
     // --------------------------------
@@ -144,27 +166,34 @@ function draw() {
     ) {
 
       distortionLevel +=
-        0.00035 * deltaTime;
+        0.00035 *
+        deltaTime;
 
-    } else if (tilt < 84) {
+    } else if (
+      tilt < 84
+    ) {
 
       distortionLevel -=
-        0.00045 * deltaTime;
+        0.00045 *
+        deltaTime;
     }
 
-    distortionLevel = constrain(
-      distortionLevel,
-      0,
-      1
-    );
+    distortionLevel =
+      constrain(
+        distortionLevel,
+        0,
+        1
+      );
 
 
     // --------------------------------
-    // DRAW LARGE BUBBLE
+    // LARGE BUBBLE
     // --------------------------------
 
     let bubbleSize =
-      min(width, height) * 0.60;
+      min(width, height) *
+      0.72;
+
 
     drawBubble(
       width / 2,
@@ -175,35 +204,23 @@ function draw() {
 
 
     // --------------------------------
-    // DRAW MINION INSIDE BUBBLE
+    // MINION + DISTORTION
+    // EVERYTHING IS MASKED
     // --------------------------------
 
     if (
+      !popStarted &&
       imageReady &&
-      !popStarted
+      minion &&
+      revealAmount > 0
     ) {
 
-      drawMinion(
+      drawMinionInsideBubble(
         width / 2,
         height / 2,
+        bubbleSize,
         revealAmount,
-        bubbleSize
-      );
-    }
-
-
-    // --------------------------------
-    // DISTORTION
-    // --------------------------------
-
-    if (
-      distortionLevel > 0 &&
-      !popStarted
-    ) {
-
-      drawDistortion(
-        distortionLevel,
-        bubbleSize
+        distortionLevel
       );
     }
 
@@ -217,11 +234,16 @@ function draw() {
       drawPopAnimation();
 
       let elapsed =
-        millis() - popStartTime;
+        millis() -
+        popStartTime;
 
-      if (elapsed > popDuration) {
+      if (
+        elapsed >
+        popDuration
+      ) {
 
         popStarted = false;
+
         bubblePopped = true;
       }
     }
@@ -241,7 +263,8 @@ function draw() {
       textFont("Georgia");
 
       textSize(
-        min(width, height) * 0.045
+        min(width, height) *
+        0.045
       );
 
       fill(
@@ -250,8 +273,6 @@ function draw() {
         255,
         230
       );
-
-      // Kept at the bottom as requested
 
       text(
         "reveal what's hidden.",
@@ -282,7 +303,8 @@ function draw() {
     textFont("Georgia");
 
     textSize(
-      min(width, height) * 0.045
+      min(width, height) *
+      0.045
     );
 
     fill(255);
@@ -307,11 +329,13 @@ function draw() {
   ) {
 
     let elapsed =
-      millis() - contributionStartTime;
+      millis() -
+      contributionStartTime;
 
     contributionFade =
       constrain(
-        elapsed / contributionFadeDuration,
+        elapsed /
+        contributionFadeDuration,
         0,
         1
       );
@@ -337,9 +361,9 @@ function draw() {
 }
 
 
-// --------------------------------
+// ================================================
 // BUBBLE
-// --------------------------------
+// ================================================
 
 function drawBubble(
   x,
@@ -649,47 +673,36 @@ function drawBubble(
 }
 
 
-// --------------------------------
-// MINION — MASKED INSIDE BUBBLE
-// --------------------------------
+// ================================================
+// MINION + DISTORTION
+// MASKED INSIDE THE BUBBLE
+// ================================================
 
-function drawMinion(
+function drawMinionInsideBubble(
   x,
   y,
-  revealAmount,
-  bubbleSize
+  size,
+  opacity,
+  distortionLevel
 ) {
-
-  if (!imageReady) {
-    return;
-  }
 
   push();
 
   imageMode(CENTER);
 
 
-  // The clipping circle is slightly
-  // smaller than the bubble edge so
-  // the image stays completely inside.
-
-  let maskSize =
-    bubbleSize * 0.91;
-
-
-  // Save the canvas drawing state
+  // --------------------------------
+  // CREATE ONE LARGE CIRCULAR MASK
+  // --------------------------------
 
   drawingContext.save();
-
-
-  // Create a circular clipping region
 
   drawingContext.beginPath();
 
   drawingContext.arc(
     x,
     y,
-    maskSize / 2,
+    size * 0.49,
     0,
     Math.PI * 2
   );
@@ -697,282 +710,517 @@ function drawMinion(
   drawingContext.clip();
 
 
-  // Image size
+  // --------------------------------
+  // IMAGE SIZE
+  // --------------------------------
 
   let imageSize =
-    min(width, height) * 0.38;
+    size * 0.98;
 
 
-  let alphaAmount =
-    map(
-      revealAmount,
-      0,
-      255,
-      0,
-      255
-    );
+  let intensity =
+    distortionLevel;
 
 
-  tint(
-    255,
-    alphaAmount
-  );
+  // --------------------------------
+  // NORMAL IMAGE
+  // --------------------------------
 
-
-  image(
-    minion,
-    x,
-    y,
-    imageSize,
-    imageSize
-  );
-
-
-  noTint();
-
-
-  // Restore the normal canvas
-
-  drawingContext.restore();
-
-  pop();
-}
-
-
-// --------------------------------
-// DISTORTION
-// --------------------------------
-
-function drawDistortion(
-  level,
-  bubbleSize
-) {
-
-  if (!imageReady) {
-    return;
-  }
-
-  push();
-
-
-  let amount =
-    level * 45;
-
-  let slices =
-    floor(
-      map(
-        level,
-        0,
-        1,
-        2,
-        22
-      )
-    );
-
-
-  // Dark sections
-
-  for (
-    let i = 0;
-    i < slices;
-    i++
+  if (
+    intensity < 0.02
   ) {
 
-    let y =
-      random(height);
-
-    let h =
-      random(
-        2,
-        15
-      ) * level;
-
-    fill(
-      0,
-      random(
-        20,
-        100
-      )
+    tint(
+      255,
+      opacity
     );
+
+    image(
+      minion,
+      x,
+      y,
+      imageSize,
+      imageSize
+    );
+
+    noTint();
+
+  } else {
+
+
+    // ========================================
+    // DEEPENING BLACKS
+    // ========================================
+
+    let blackStrength =
+      100 -
+      intensity * 45;
+
+
+    drawingContext.filter =
+      "contrast(" +
+      (
+        100 +
+        intensity * 180
+      ) +
+      "%) brightness(" +
+      blackStrength +
+      "%)";
+
+
+    tint(
+      255,
+      opacity
+    );
+
+
+    image(
+      minion,
+      x,
+      y,
+      imageSize,
+      imageSize
+    );
+
+
+    drawingContext.filter =
+      "none";
+
+
+    // ========================================
+    // SUBTLE RGB SEPARATION
+    // ========================================
+
+    let rgbShift =
+      intensity * 55;
+
+
+    if (
+      intensity > 0.08
+    ) {
+
+      tint(
+        255,
+        255,
+        255,
+        opacity *
+        intensity *
+        0.45
+      );
+
+
+      image(
+        minion,
+        x - rgbShift,
+        y,
+        imageSize,
+        imageSize
+      );
+
+
+      tint(
+        255,
+        255,
+        255,
+        opacity *
+        intensity *
+        0.30
+      );
+
+
+      image(
+        minion,
+        x + rgbShift,
+        y,
+        imageSize,
+        imageSize
+      );
+
+
+      noTint();
+    }
+
+
+    // ========================================
+    // HORIZONTAL SLICING
+    // ========================================
+
+    let sliceCount =
+      5 +
+      floor(
+        intensity * 15
+      );
+
+
+    for (
+      let i = 0;
+      i < sliceCount;
+      i++
+    ) {
+
+      let sliceHeight =
+        imageSize /
+        sliceCount;
+
+
+      let sliceY =
+        y -
+        imageSize / 2 +
+        i * sliceHeight;
+
+
+      let direction =
+        i % 2 === 0
+          ? 1
+          : -1;
+
+
+      let shift =
+        direction *
+        intensity *
+        120;
+
+
+      if (
+        intensity > 0.35
+      ) {
+
+        shift +=
+          random(
+            -1,
+            1
+          ) *
+          intensity *
+          50;
+      }
+
+
+      // Additional slice mask
+
+      drawingContext.save();
+
+      drawingContext.beginPath();
+
+      drawingContext.rect(
+        x - imageSize,
+        sliceY,
+        imageSize * 2,
+        sliceHeight + 4
+      );
+
+      drawingContext.clip();
+
+
+      drawingContext.filter =
+        "contrast(" +
+        (
+          100 +
+          intensity * 180
+        ) +
+        "%)";
+
+
+      tint(
+        255,
+        255,
+        255,
+        opacity
+      );
+
+
+      image(
+        minion,
+        x + shift,
+        y,
+        imageSize,
+        imageSize
+      );
+
+
+      drawingContext.filter =
+        "none";
+
+      noTint();
+
+      drawingContext.restore();
+    }
+
+
+    // ========================================
+    // PIXELATION
+    // ========================================
+
+    drawingContext.filter =
+      "none";
+
+
+    let pixelSize =
+      2 +
+      intensity * 28;
+
+
+    let pixelCount =
+      floor(
+        intensity * 110
+      );
+
 
     noStroke();
 
-    rect(
-      0,
-      y,
-      width,
-      h
-    );
-  }
-
-
-  // Horizontal slices
-
-  for (
-    let i = 0;
-    i < slices;
-    i++
-  ) {
-
-    let y =
-      random(
-        height * 0.2,
-        height * 0.8
-      );
-
-    let h =
-      random(
-        2,
-        12
-      );
-
-    let offset =
-      random(
-        -amount,
-        amount
-      );
-
-    let sourceY =
-      constrain(
-        y,
-        0,
-        height - h
-      );
-
-    copy(
-      0,
-      sourceY,
-      width,
-      h,
-      offset,
-      sourceY,
-      width,
-      h
-    );
-  }
-
-
-  // RGB separation
-
-  if (level > 0.2) {
-
-    blendMode(ADD);
-
-    tint(
-      255,
-      0,
-      80,
-      45 * level
-    );
-
-    image(
-      minion,
-      width / 2 - amount * 0.4,
-      height / 2,
-      min(width, height) * 0.27,
-      min(width, height) * 0.27
-    );
-
-    tint(
-      0,
-      200,
-      255,
-      45 * level
-    );
-
-    image(
-      minion,
-      width / 2 + amount * 0.4,
-      height / 2,
-      min(width, height) * 0.27,
-      min(width, height) * 0.27
-    );
-
-    blendMode(BLEND);
-
-    noTint();
-  }
-
-
-  // Glitch bars
-
-  if (level > 0.35) {
 
     for (
       let i = 0;
-      i < 12 * level;
+      i < pixelCount;
       i++
     ) {
 
-      let y =
-        random(height);
+      let px =
+        x -
+        imageSize / 2 +
+        random(imageSize);
 
-      let w =
+
+      let py =
+        y -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let blockSize =
         random(
-          width * 0.05,
-          width * 0.6
+          pixelSize * 0.4,
+          pixelSize * 2
         );
 
-      let h =
-        random(
-          2,
-          10
-        );
 
       fill(
-        random([
-          255,
-          0,
-          180
-        ]),
+        0,
+        0,
+        0,
         random(
-          30,
-          100
+          70,
+          230
         )
       );
 
+
       rect(
-        random(width - w),
-        y,
-        w,
-        h
+        px,
+        py,
+        blockSize,
+        blockSize
       );
     }
-  }
 
 
-  // Heavy black cuts
+    // ========================================
+    // MISSING BLACK SECTIONS
+    // ========================================
 
-  if (level > 0.65) {
+    let missingCount =
+      floor(
+        intensity * 25
+      );
+
 
     for (
       let i = 0;
-      i < 10;
+      i < missingCount;
       i++
     ) {
 
+      let px =
+        x -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let py =
+        y -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let blockWidth =
+        random(
+          10,
+          70
+        );
+
+
+      let blockHeight =
+        random(
+          5,
+          30
+        );
+
+
       fill(
+        0,
+        0,
+        0,
+        random(
+          100,
+          240
+        )
+      );
+
+
+      rect(
+        px,
+        py,
+        blockWidth,
+        blockHeight
+      );
+    }
+
+
+    // ========================================
+    // GHOSTING
+    // ========================================
+
+    if (
+      intensity > 0.25
+    ) {
+
+      drawingContext.filter =
+        "contrast(" +
+        (
+          100 +
+          intensity * 200
+        ) +
+        "%)";
+
+
+      tint(
+        255,
+        255,
+        255,
+        opacity *
+        intensity *
+        0.35
+      );
+
+
+      image(
+        minion,
+        x -
+        intensity * 100,
+        y +
+        random(
+          -8,
+          8
+        ),
+        imageSize,
+        imageSize
+      );
+
+
+      tint(
+        255,
+        255,
+        255,
+        opacity *
+        intensity *
+        0.30
+      );
+
+
+      image(
+        minion,
+        x +
+        intensity * 100,
+        y +
+        random(
+          -8,
+          8
+        ),
+        imageSize,
+        imageSize
+      );
+
+
+      noTint();
+    }
+
+
+    // ========================================
+    // GLITCH BARS
+    // ========================================
+
+    drawingContext.filter =
+      "none";
+
+
+    let glitchCount =
+      floor(
+        intensity * 25
+      );
+
+
+    for (
+      let i = 0;
+      i < glitchCount;
+      i++
+    ) {
+
+      let barY =
+        y -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      let barWidth =
+        random(
+          imageSize * 0.15,
+          imageSize * 0.9
+        );
+
+
+      let barHeight =
+        random(
+          2,
+          12
+        );
+
+
+      let barX =
+        x -
+        imageSize / 2 +
+        random(imageSize);
+
+
+      fill(
+        0,
+        0,
         0,
         random(
           80,
-          200
+          220
         )
       );
 
+
       rect(
-        random(width),
-        random(height),
-        random(
-          10,
-          100
-        ),
-        random(
-          5,
-          40
-        )
+        barX,
+        barY,
+        barWidth,
+        barHeight
       );
     }
   }
+
+
+  // --------------------------------
+  // RESET EVERYTHING
+  // --------------------------------
+
+  noTint();
+
+  drawingContext.filter =
+    "none";
+
+  drawingContext.restore();
 
   pop();
 }
@@ -985,17 +1233,20 @@ function drawDistortion(
 function drawPopAnimation() {
 
   let elapsed =
-    millis() - popStartTime;
+    millis() -
+    popStartTime;
 
   let progress =
     constrain(
-      elapsed / popDuration,
+      elapsed /
+      popDuration,
       0,
       1
     );
 
   let eased =
-    1 - pow(
+    1 -
+    pow(
       1 - progress,
       3
     );
@@ -1031,7 +1282,10 @@ function drawPopAnimation() {
       255,
       255,
       150 *
-      (1 - ringProgress)
+      (
+        1 -
+        ringProgress
+      )
     );
 
     ellipse(
@@ -1052,7 +1306,10 @@ function drawPopAnimation() {
     255,
     255,
     150 *
-    (1 - progress)
+    (
+      1 -
+      progress
+    )
   );
 
   ellipse(
@@ -1079,6 +1336,7 @@ function drawPopAnimation() {
       droplets[i];
 
     d.x += d.vx;
+
     d.y += d.vy;
 
     d.vy += 0.025;
@@ -1129,9 +1387,11 @@ function createDroplets() {
 
     droplets.push({
 
-      x: width / 2,
+      x:
+        width / 2,
 
-      y: height / 2,
+      y:
+        height / 2,
 
       vx:
         cos(angle) *
@@ -1181,7 +1441,6 @@ function drawContributionScreen(
 
   background(0);
 
-
   textAlign(
     CENTER,
     CENTER
@@ -1190,7 +1449,8 @@ function drawContributionScreen(
   textFont("Georgia");
 
   textSize(
-    min(width, height) * 0.045
+    min(width, height) *
+    0.045
   );
 
   fill(
@@ -1259,7 +1519,8 @@ function drawContributionScreen(
     );
 
     textSize(
-      min(width, height) * 0.035
+      min(width, height) *
+      0.035
     );
 
     text(
@@ -1364,7 +1625,8 @@ function drawContributionScreen(
   );
 
   textSize(
-    min(width, height) * 0.027
+    min(width, height) *
+    0.027
   );
 
   text(
@@ -1393,9 +1655,7 @@ function startFinalBubbles() {
     finalBubbles.push({
 
       x:
-        random(
-          width
-        ),
+        random(width),
 
       y:
         random(
@@ -1405,8 +1665,10 @@ function startFinalBubbles() {
 
       size:
         random(
-          min(width, height) * 0.04,
-          min(width, height) * 0.20
+          min(width, height) *
+          0.04,
+          min(width, height) *
+          0.20
         ),
 
       speed:
@@ -1446,7 +1708,6 @@ function startFinalBubbles() {
 function drawFinalBubbleEffect() {
 
   background(0);
-
 
   let elapsed =
     millis() -
@@ -1541,12 +1802,17 @@ function drawFinalBubbleEffect() {
 
         y:
           height +
-          random(20, 100),
+          random(
+            20,
+            100
+          ),
 
         size:
           random(
-            min(width, height) * 0.04,
-            min(width, height) * 0.15
+            min(width, height) *
+            0.04,
+            min(width, height) *
+            0.15
           ),
 
         speed:
@@ -1640,7 +1906,8 @@ function drawFinalBubbleEffect() {
   textFont("Georgia");
 
   textSize(
-    min(width, height) * 0.045
+    min(width, height) *
+    0.045
   );
 
   fill(
@@ -1693,7 +1960,8 @@ function drawFinalBubble(
     5,
     25,
     35,
-    150 * overallAlpha
+    150 *
+    overallAlpha
   );
 
   ellipse(
@@ -1710,7 +1978,8 @@ function drawFinalBubble(
     0,
     220,
     255,
-    25 * overallAlpha
+    25 *
+    overallAlpha
   );
 
   ellipse(
@@ -1725,7 +1994,8 @@ function drawFinalBubble(
     170,
     80,
     255,
-    25 * overallAlpha
+    25 *
+    overallAlpha
   );
 
   ellipse(
@@ -1740,7 +2010,8 @@ function drawFinalBubble(
     255,
     80,
     180,
-    20 * overallAlpha
+    20 *
+    overallAlpha
   );
 
   ellipse(
@@ -1855,7 +2126,8 @@ function drawFinalBubble(
     255,
     255,
     255,
-    120 * overallAlpha
+    120 *
+    overallAlpha
   );
 
   ellipse(
@@ -1870,7 +2142,8 @@ function drawFinalBubble(
     255,
     255,
     255,
-    70 * overallAlpha
+    70 *
+    overallAlpha
   );
 
   ellipse(
