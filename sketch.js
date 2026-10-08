@@ -45,6 +45,14 @@ let drawingPoints = [];
 
 
 // --------------------------------
+// BUBBLE DECORATION RANDOMIZATION
+// --------------------------------
+
+let bubbleOvals = [];
+let bubbleSparkles = [];
+
+
+// --------------------------------
 // FINAL BUBBLE WAVE
 // --------------------------------
 
@@ -85,11 +93,202 @@ async function setup() {
 
   lastFrameTime = millis();
 
+  // --------------------------------
+  // RANDOMIZE MAIN BUBBLE
+  // --------------------------------
+
+  createBubbleDecorations();
+
+  // --------------------------------
+  // LOAD MINION
+  // --------------------------------
+
   minion = await loadImage(
     "https://nyxsywyxsy.github.io/Bubble-Pop/minion.jpg"
   );
 
   imageReady = true;
+}
+
+
+// --------------------------------
+// RANDOMIZE BUBBLE DECORATIONS
+// --------------------------------
+
+function createBubbleDecorations() {
+
+  bubbleOvals = [];
+
+  bubbleSparkles = [];
+
+
+  // --------------------------------
+  // COLOURED OVALS
+  // --------------------------------
+
+  let ovalColours = [
+
+    {
+      r: 0,
+      g: 220,
+      b: 255
+    },
+
+    {
+      r: 170,
+      g: 80,
+      b: 255
+    },
+
+    {
+      r: 255,
+      g: 80,
+      b: 180
+    },
+
+    {
+      r: 70,
+      g: 130,
+      b: 255
+    },
+
+    {
+      r: 100,
+      g: 255,
+      b: 190
+    },
+
+    {
+      r: 255,
+      g: 230,
+      b: 100
+    }
+  ];
+
+
+  for (
+    let i = 0;
+    i < ovalColours.length;
+    i++
+  ) {
+
+    let angle =
+      random(360);
+
+    let distance =
+      random(
+        0.05,
+        0.28
+      );
+
+    bubbleOvals.push({
+
+      x:
+        cos(angle) *
+        distance,
+
+      y:
+        sin(angle) *
+        distance,
+
+      width:
+        random(
+          0.30,
+          0.72
+        ),
+
+      height:
+        random(
+          0.25,
+          0.65
+        ),
+
+      rotation:
+        random(
+          -30,
+          30
+        ),
+
+      r:
+        ovalColours[i].r,
+
+      g:
+        ovalColours[i].g,
+
+      b:
+        ovalColours[i].b,
+
+      alpha:
+        random(
+          18,
+          48
+        )
+    });
+  }
+
+
+  // --------------------------------
+  // RANDOMIZED SPARKLES
+  // --------------------------------
+
+  let sparkleCount =
+    floor(
+      random(
+        8,
+        14
+      )
+    );
+
+
+  for (
+    let i = 0;
+    i < sparkleCount;
+    i++
+  ) {
+
+    let angle =
+      random(360);
+
+    let distance =
+      random(
+        0.25,
+        0.45
+      );
+
+
+    bubbleSparkles.push({
+
+      x:
+        cos(angle) *
+        distance,
+
+      y:
+        sin(angle) *
+        distance,
+
+      size:
+        random(
+          0.012,
+          0.035
+        ),
+
+      alpha:
+        random(
+          100,
+          220
+        ),
+
+      rotation:
+        random(360),
+
+      // Some sparkles are slightly softer
+      softness:
+        random(
+          0.7,
+          1.3
+        )
+    });
+  }
 }
 
 
@@ -195,11 +394,38 @@ function draw() {
       0.72;
 
 
+    // --------------------------------
+    // POP FADE
+    // --------------------------------
+
+    let bubbleOpacity = 1;
+
+    if (popStarted) {
+
+      let popElapsed =
+        millis() -
+        popStartTime;
+
+      let popProgress =
+        constrain(
+          popElapsed /
+          popDuration,
+          0,
+          1
+        );
+
+      bubbleOpacity =
+        1 -
+        popProgress;
+    }
+
+
     drawBubble(
       width / 2,
       height / 2,
       bubbleSize,
-      revealAmount
+      revealAmount,
+      bubbleOpacity
     );
 
 
@@ -369,7 +595,8 @@ function drawBubble(
   x,
   y,
   size,
-  revealAmount
+  revealAmount,
+  bubbleOpacity
 ) {
 
   push();
@@ -380,7 +607,9 @@ function drawBubble(
   );
 
 
-  // Main dark bubble
+  // --------------------------------
+  // MAIN DARK BUBBLE
+  // --------------------------------
 
   noStroke();
 
@@ -388,7 +617,8 @@ function drawBubble(
     5,
     25,
     35,
-    245
+    245 *
+    bubbleOpacity
   );
 
   ellipse(
@@ -399,109 +629,52 @@ function drawBubble(
   );
 
 
-  // Cyan glow
+  // --------------------------------
+  // RANDOMIZED COLOURED OVALS
+  // --------------------------------
 
-  fill(
-    0,
-    220,
-    255,
-    35
-  );
+  for (
+    let i = 0;
+    i < bubbleOvals.length;
+    i++
+  ) {
 
-  ellipse(
-    -size * 0.18,
-    -size * 0.16,
-    size * 0.65,
-    size * 0.58
-  );
+    let oval =
+      bubbleOvals[i];
 
+    push();
 
-  // Purple
+    translate(
+      oval.x * size,
+      oval.y * size
+    );
 
-  fill(
-    170,
-    80,
-    255,
-    45
-  );
+    rotate(
+      oval.rotation
+    );
 
-  ellipse(
-    size * 0.18,
-    -size * 0.05,
-    size * 0.65,
-    size * 0.7
-  );
+    fill(
+      oval.r,
+      oval.g,
+      oval.b,
+      oval.alpha *
+      bubbleOpacity
+    );
 
+    ellipse(
+      0,
+      0,
+      size * oval.width,
+      size * oval.height
+    );
 
-  // Pink
-
-  fill(
-    255,
-    80,
-    180,
-    35
-  );
-
-  ellipse(
-    0,
-    size * 0.2,
-    size * 0.75,
-    size * 0.6
-  );
+    pop();
+  }
 
 
-  // Blue
-
-  fill(
-    70,
-    130,
-    255,
-    35
-  );
-
-  ellipse(
-    -size * 0.22,
-    size * 0.2,
-    size * 0.45,
-    size * 0.55
-  );
-
-
-  // Green
-
-  fill(
-    100,
-    255,
-    190,
-    25
-  );
-
-  ellipse(
-    size * 0.25,
-    size * 0.2,
-    size * 0.4,
-    size * 0.45
-  );
-
-
-  // Yellow
-
-  fill(
-    255,
-    230,
-    100,
-    20
-  );
-
-  ellipse(
-    -size * 0.1,
-    -size * 0.3,
-    size * 0.35,
-    size * 0.3
-  );
-
-
-  // Rainbow edge arcs
+  // --------------------------------
+  // RAINBOW EDGE ARCS
+  // --------------------------------
 
   noFill();
 
@@ -509,11 +682,13 @@ function drawBubble(
     size * 0.018
   );
 
+
   stroke(
     0,
     220,
     255,
-    150
+    150 *
+    bubbleOpacity
   );
 
   arc(
@@ -530,7 +705,8 @@ function drawBubble(
     160,
     80,
     255,
-    150
+    150 *
+    bubbleOpacity
   );
 
   arc(
@@ -547,7 +723,8 @@ function drawBubble(
     255,
     90,
     190,
-    150
+    150 *
+    bubbleOpacity
   );
 
   arc(
@@ -564,7 +741,8 @@ function drawBubble(
     80,
     150,
     255,
-    150
+    150 *
+    bubbleOpacity
   );
 
   arc(
@@ -581,7 +759,8 @@ function drawBubble(
     100,
     255,
     190,
-    150
+    150 *
+    bubbleOpacity
   );
 
   arc(
@@ -594,7 +773,9 @@ function drawBubble(
   );
 
 
-  // White reflections
+  // --------------------------------
+  // MAIN WHITE REFLECTION
+  // --------------------------------
 
   noStroke();
 
@@ -602,7 +783,8 @@ function drawBubble(
     255,
     255,
     255,
-    120
+    120 *
+    bubbleOpacity
   );
 
   ellipse(
@@ -614,17 +796,22 @@ function drawBubble(
 
   ellipse(
     -size * 0.17,
-    -size * 0.2,
+    -size * 0.20,
     size * 0.07,
     size * 0.035
   );
 
 
+  // --------------------------------
+  // SECONDARY REFLECTION
+  // --------------------------------
+
   fill(
     255,
     255,
     255,
-    80
+    80 *
+    bubbleOpacity
   );
 
   ellipse(
@@ -635,39 +822,99 @@ function drawBubble(
   );
 
   ellipse(
-    size * 0.3,
+    size * 0.30,
     size * 0.23,
     size * 0.025,
     size * 0.025
   );
 
 
-  // Small sparkles
+  // --------------------------------
+  // RANDOMIZED WHIMSICAL SPARKLES
+  // --------------------------------
 
-  fill(
-    255,
-    255,
-    255,
-    180
-  );
+  for (
+    let i = 0;
+    i < bubbleSparkles.length;
+    i++
+  ) {
 
-  drawSparkle(
-    -size * 0.43,
-    -size * 0.03,
-    size * 0.025
-  );
+    let sparkle =
+      bubbleSparkles[i];
 
-  drawSparkle(
-    size * 0.4,
-    -size * 0.18,
-    size * 0.018
-  );
+    let sparkleSize =
+      size *
+      sparkle.size *
+      sparkle.softness;
 
-  drawSparkle(
-    -size * 0.28,
-    size * 0.35,
-    size * 0.015
-  );
+
+    fill(
+      255,
+      255,
+      255,
+      sparkle.alpha *
+      bubbleOpacity
+    );
+
+
+    drawSparkle(
+      sparkle.x * size,
+      sparkle.y * size,
+      sparkleSize
+    );
+  }
+
+
+  // --------------------------------
+  // A FEW TINY EXTRA STAR POINTS
+  // --------------------------------
+
+  for (
+    let i = 0;
+    i < 5;
+    i++
+  ) {
+
+    let angle =
+      i * 72 +
+      20;
+
+    let distance =
+      0.32 +
+      sin(
+        i * 47
+      ) *
+      0.06;
+
+
+    let sparkleX =
+      cos(angle) *
+      distance *
+      size;
+
+    let sparkleY =
+      sin(angle) *
+      distance *
+      size;
+
+
+    fill(
+      255,
+      255,
+      255,
+      90 *
+      bubbleOpacity
+    );
+
+
+    ellipse(
+      sparkleX,
+      sparkleY,
+      size * 0.008,
+      size * 0.008
+    );
+  }
+
 
   pop();
 }
@@ -716,7 +963,6 @@ function drawMinionInsideBubble(
 
   let imageSize =
     size * 0.98;
-
 
   let intensity =
     distortionLevel;
@@ -894,8 +1140,6 @@ function drawMinionInsideBubble(
           50;
       }
 
-
-      // Additional slice mask
 
       drawingContext.save();
 
@@ -1211,10 +1455,6 @@ function drawMinionInsideBubble(
   }
 
 
-  // --------------------------------
-  // RESET EVERYTHING
-  // --------------------------------
-
   noTint();
 
   drawingContext.filter =
@@ -1244,6 +1484,9 @@ function drawPopAnimation() {
       1
     );
 
+
+  // Stronger easing for a quick burst
+
   let eased =
     1 -
     pow(
@@ -1252,11 +1495,14 @@ function drawPopAnimation() {
     );
 
 
-  // Expanding rings
+  // --------------------------------
+  // EXPANDING RINGS
+  // --------------------------------
 
   noFill();
 
   strokeWeight(3);
+
 
   for (
     let i = 0;
@@ -1267,26 +1513,32 @@ function drawPopAnimation() {
     let ringProgress =
       constrain(
         progress -
-        i * 0.08,
+        i * 0.07,
         0,
         1
       );
 
+
     let ringSize =
       min(width, height) *
-      0.4 *
-      ringProgress;
+      (
+        0.15 +
+        0.55 *
+        ringProgress
+      );
+
 
     stroke(
       255,
       255,
       255,
-      150 *
+      170 *
       (
         1 -
         ringProgress
       )
     );
+
 
     ellipse(
       width / 2,
@@ -1297,7 +1549,81 @@ function drawPopAnimation() {
   }
 
 
-  // Flash
+  // --------------------------------
+  // COLOURED BURST RINGS
+  // --------------------------------
+
+  let colours = [
+
+    [0, 220, 255],
+
+    [170, 80, 255],
+
+    [255, 80, 180],
+
+    [100, 255, 190],
+
+    [255, 230, 100]
+  ];
+
+
+  for (
+    let i = 0;
+    i < colours.length;
+    i++
+  ) {
+
+    let ringProgress =
+      constrain(
+        progress -
+        i * 0.045,
+        0,
+        1
+      );
+
+
+    let ringSize =
+      min(width, height) *
+      (
+        0.25 +
+        ringProgress *
+        0.75
+      );
+
+
+    stroke(
+      colours[i][0],
+      colours[i][1],
+      colours[i][2],
+      130 *
+      (
+        1 -
+        ringProgress
+      )
+    );
+
+
+    strokeWeight(
+      min(width, height) *
+      0.008
+    );
+
+
+    noFill();
+
+
+    ellipse(
+      width / 2,
+      height / 2,
+      ringSize,
+      ringSize
+    );
+  }
+
+
+  // --------------------------------
+  // CENTRAL FLASH
+  // --------------------------------
 
   noStroke();
 
@@ -1305,26 +1631,31 @@ function drawPopAnimation() {
     255,
     255,
     255,
-    150 *
+    170 *
     (
       1 -
       progress
     )
   );
 
+
+  let flashSize =
+    min(width, height) *
+    0.15 *
+    eased;
+
+
   ellipse(
     width / 2,
     height / 2,
-    min(width, height) *
-    0.35 *
-    eased,
-    min(width, height) *
-    0.35 *
-    eased
+    flashSize,
+    flashSize
   );
 
 
-  // Droplets
+  // --------------------------------
+  // DROPLETS
+  // --------------------------------
 
   for (
     let i = 0;
@@ -1335,13 +1666,19 @@ function drawPopAnimation() {
     let d =
       droplets[i];
 
-    d.x += d.vx;
 
-    d.y += d.vy;
+    d.x +=
+      d.vx;
 
-    d.vy += 0.025;
+    d.y +=
+      d.vy;
 
-    d.alpha *= 0.985;
+    d.vy +=
+      0.025;
+
+    d.alpha *=
+      0.985;
+
 
     noStroke();
 
@@ -1349,8 +1686,13 @@ function drawPopAnimation() {
       d.r,
       d.g,
       d.b,
-      d.alpha
+      d.alpha *
+      (
+        1 -
+        progress * 0.5
+      )
     );
+
 
     ellipse(
       d.x,
@@ -1370,20 +1712,23 @@ function createDroplets() {
 
   droplets = [];
 
+
   for (
     let i = 0;
-    i < 20;
+    i < 25;
     i++
   ) {
 
     let angle =
       random(360);
 
+
     let speed =
       random(
         1,
         5
       );
+
 
     droplets.push({
 
@@ -1425,7 +1770,8 @@ function createDroplets() {
           255
         ),
 
-      alpha: 220
+      alpha:
+        220
     });
   }
 }
@@ -1467,7 +1813,9 @@ function drawContributionScreen(
   );
 
 
-  // Drawing area
+  // --------------------------------
+  // DRAWING AREA
+  // --------------------------------
 
   let boxWidth =
     width * 0.78;
@@ -1503,7 +1851,9 @@ function drawContributionScreen(
   );
 
 
-  // Placeholder
+  // --------------------------------
+  // PLACEHOLDER
+  // --------------------------------
 
   if (
     drawingPoints.length === 0
@@ -1532,7 +1882,9 @@ function drawContributionScreen(
   }
 
 
-  // Draw user's strokes
+  // --------------------------------
+  // USER DRAWING
+  // --------------------------------
 
   if (
     drawingPoints.length > 1
@@ -1550,6 +1902,7 @@ function drawContributionScreen(
     strokeWeight(4);
 
     strokeCap(ROUND);
+
 
     for (
       let i = 1;
@@ -1583,7 +1936,9 @@ function drawContributionScreen(
   }
 
 
-  // Submit button
+  // --------------------------------
+  // SUBMIT BUTTON
+  // --------------------------------
 
   let buttonWidth =
     width * 0.58;
@@ -1646,6 +2001,7 @@ function startFinalBubbles() {
 
   finalBubbles = [];
 
+
   for (
     let i = 0;
     i < finalBubbleCount;
@@ -1699,19 +2055,37 @@ function startFinalBubbles() {
         random(
           90,
           210
+        ),
+
+      vx:
+        random(
+          -0.3,
+          0.3
+        ),
+
+      vy:
+        random(
+          -0.2,
+          0.2
         )
     });
   }
 }
 
 
+// --------------------------------
+// FINAL BUBBLE EFFECT
+// --------------------------------
+
 function drawFinalBubbleEffect() {
 
   background(0);
 
+
   let elapsed =
     millis() -
     finalBubbleStartTime;
+
 
   let progress =
     constrain(
@@ -1722,7 +2096,9 @@ function drawFinalBubbleEffect() {
     );
 
 
-  // Slowly make bubbles visible
+  // --------------------------------
+  // BUBBLE FADE-IN
+  // --------------------------------
 
   let bubbleAlpha =
     constrain(
@@ -1732,7 +2108,37 @@ function drawFinalBubbleEffect() {
     );
 
 
-  // Move bubbles upward
+  // --------------------------------
+  // PHONE TILT
+  // --------------------------------
+
+  let tiltX = 0;
+  let tiltY = 0;
+
+
+  if (
+    window.sensorsEnabled
+  ) {
+
+    tiltX =
+      constrain(
+        rotationY,
+        -45,
+        45
+      );
+
+    tiltY =
+      constrain(
+        rotationX,
+        -45,
+        45
+      );
+  }
+
+
+  // --------------------------------
+  // MOVE BUBBLES
+  // --------------------------------
 
   for (
     let i = 0;
@@ -1744,20 +2150,110 @@ function drawFinalBubbleEffect() {
       finalBubbles[i];
 
 
-    b.y -= b.speed;
+    // Natural upward movement
+
+    b.vy -=
+      0.005;
+
+
+    // Tilt pushes bubbles
+
+    b.vx +=
+      map(
+        tiltX,
+        -45,
+        45,
+        -0.035,
+        0.035
+      );
+
+
+    b.vy +=
+      map(
+        tiltY,
+        -45,
+        45,
+        -0.025,
+        0.025
+      );
+
+
+    // Limit speed
+
+    b.vx =
+      constrain(
+        b.vx,
+        -2.5,
+        2.5
+      );
+
+
+    b.vy =
+      constrain(
+        b.vy,
+        -2.5,
+        2.5
+      );
+
+
+    b.x +=
+      b.vx;
+
+
+    b.y +=
+      b.vy -
+      b.speed;
+
+
+    // Gentle natural drift
 
     b.x +=
       sin(
         frameCount * 0.7 +
         b.phase
       ) *
-      0.35;
+      0.25;
+
 
     b.rotation +=
       b.rotationSpeed;
 
 
-    // Reset bubbles when they leave
+    // --------------------------------
+    // SCREEN BOUNCE
+    // --------------------------------
+
+    if (
+      b.x <
+      b.size / 2
+    ) {
+
+      b.x =
+        b.size / 2;
+
+      b.vx *=
+        -0.8;
+    }
+
+
+    if (
+      b.x >
+      width -
+      b.size / 2
+    ) {
+
+      b.x =
+        width -
+        b.size / 2;
+
+      b.vx *=
+        -0.8;
+    }
+
+
+    // --------------------------------
+    // TOP RESET
+    // --------------------------------
 
     if (
       b.y <
@@ -1773,17 +2269,177 @@ function drawFinalBubbleEffect() {
 
       b.x =
         random(width);
-    }
 
+      b.vy =
+        random(
+          -0.2,
+          0.2
+        );
+    }
+  }
+
+
+  // --------------------------------
+  // BUBBLE COLLISIONS
+  // --------------------------------
+
+  for (
+    let i = 0;
+    i < finalBubbles.length;
+    i++
+  ) {
+
+    for (
+      let j = i + 1;
+      j < finalBubbles.length;
+      j++
+    ) {
+
+      let a =
+        finalBubbles[i];
+
+      let b =
+        finalBubbles[j];
+
+
+      let dx =
+        b.x -
+        a.x;
+
+      let dy =
+        b.y -
+        a.y;
+
+
+      let distance =
+        sqrt(
+          dx * dx +
+          dy * dy
+        );
+
+
+      let minimumDistance =
+        (
+          a.size +
+          b.size
+        ) / 2;
+
+
+      if (
+        distance > 0 &&
+        distance <
+        minimumDistance
+      ) {
+
+        let nx =
+          dx /
+          distance;
+
+        let ny =
+          dy /
+          distance;
+
+
+        let overlap =
+          minimumDistance -
+          distance;
+
+
+        // Push bubbles apart
+
+        a.x -=
+          nx *
+          overlap *
+          0.5;
+
+        a.y -=
+          ny *
+          overlap *
+          0.5;
+
+
+        b.x +=
+          nx *
+          overlap *
+          0.5;
+
+        b.y +=
+          ny *
+          overlap *
+          0.5;
+
+
+        // Relative velocity
+
+        let relativeVelocity =
+          (
+            b.vx -
+            a.vx
+          ) *
+          nx +
+          (
+            b.vy -
+            a.vy
+          ) *
+          ny;
+
+
+        // Only bounce if moving toward each other
+
+        if (
+          relativeVelocity < 0
+        ) {
+
+          let bounceStrength =
+            0.85;
+
+
+          a.vx +=
+            nx *
+            relativeVelocity *
+            bounceStrength;
+
+          a.vy +=
+            ny *
+            relativeVelocity *
+            bounceStrength;
+
+
+          b.vx -=
+            nx *
+            relativeVelocity *
+            bounceStrength;
+
+          b.vy -=
+            ny *
+            relativeVelocity *
+            bounceStrength;
+        }
+      }
+    }
+  }
+
+
+  // --------------------------------
+  // DRAW BUBBLES
+  // --------------------------------
+
+  for (
+    let i = 0;
+    i < finalBubbles.length;
+    i++
+  ) {
 
     drawFinalBubble(
-      b,
+      finalBubbles[i],
       bubbleAlpha
     );
   }
 
 
-  // Add more bubbles over time
+  // --------------------------------
+  // ADD MORE BUBBLES OVER TIME
+  // --------------------------------
 
   if (
     progress > 0.25 &&
@@ -1843,13 +2499,27 @@ function drawFinalBubbleEffect() {
           random(
             100,
             220
+          ),
+
+        vx:
+          random(
+            -0.3,
+            0.3
+          ),
+
+        vy:
+          random(
+            -0.2,
+            0.2
           )
       });
     }
   }
 
 
-  // Dark overlay behind final text
+  // --------------------------------
+  // DARK OVERLAY BEHIND FINAL TEXT
+  // --------------------------------
 
   if (
     progress > 0.55
@@ -1864,6 +2534,7 @@ function drawFinalBubbleEffect() {
         85
       );
 
+
     noStroke();
 
     fill(
@@ -1872,6 +2543,7 @@ function drawFinalBubbleEffect() {
       0,
       overlayAlpha
     );
+
 
     rect(
       0,
@@ -1882,7 +2554,9 @@ function drawFinalBubbleEffect() {
   }
 
 
-  // Final message
+  // --------------------------------
+  // FINAL MESSAGE
+  // --------------------------------
 
   let messageFade =
     constrain(
@@ -1910,6 +2584,7 @@ function drawFinalBubbleEffect() {
     0.045
   );
 
+
   fill(
     255,
     255,
@@ -1917,6 +2592,7 @@ function drawFinalBubbleEffect() {
     245 *
     messageFade
   );
+
 
   text(
     "your contribution has been added.",
@@ -1937,10 +2613,12 @@ function drawFinalBubble(
 
   push();
 
+
   translate(
     b.x,
     b.y
   );
+
 
   rotate(
     b.rotation
@@ -1952,7 +2630,9 @@ function drawFinalBubble(
     overallAlpha;
 
 
-  // Dark transparent interior
+  // --------------------------------
+  // DARK TRANSPARENT INTERIOR
+  // --------------------------------
 
   noStroke();
 
@@ -1964,6 +2644,7 @@ function drawFinalBubble(
     overallAlpha
   );
 
+
   ellipse(
     0,
     0,
@@ -1972,7 +2653,9 @@ function drawFinalBubble(
   );
 
 
-  // Coloured interior glow
+  // --------------------------------
+  // COLOURED INTERIOR GLOW
+  // --------------------------------
 
   fill(
     0,
@@ -1981,6 +2664,7 @@ function drawFinalBubble(
     25 *
     overallAlpha
   );
+
 
   ellipse(
     -b.size * 0.15,
@@ -1998,6 +2682,7 @@ function drawFinalBubble(
     overallAlpha
   );
 
+
   ellipse(
     b.size * 0.15,
     0,
@@ -2014,6 +2699,7 @@ function drawFinalBubble(
     overallAlpha
   );
 
+
   ellipse(
     0,
     b.size * 0.18,
@@ -2022,7 +2708,9 @@ function drawFinalBubble(
   );
 
 
-  // Rainbow edge
+  // --------------------------------
+  // RAINBOW EDGE
+  // --------------------------------
 
   noFill();
 
@@ -2033,12 +2721,14 @@ function drawFinalBubble(
     )
   );
 
+
   stroke(
     0,
     220,
     255,
     alpha
   );
+
 
   arc(
     0,
@@ -2057,6 +2747,7 @@ function drawFinalBubble(
     alpha
   );
 
+
   arc(
     0,
     0,
@@ -2073,6 +2764,7 @@ function drawFinalBubble(
     190,
     alpha
   );
+
 
   arc(
     0,
@@ -2091,6 +2783,7 @@ function drawFinalBubble(
     alpha
   );
 
+
   arc(
     0,
     0,
@@ -2108,6 +2801,7 @@ function drawFinalBubble(
     alpha
   );
 
+
   arc(
     0,
     0,
@@ -2118,9 +2812,12 @@ function drawFinalBubble(
   );
 
 
-  // Reflection
+  // --------------------------------
+  // REFLECTION
+  // --------------------------------
 
   noStroke();
+
 
   fill(
     255,
@@ -2129,6 +2826,7 @@ function drawFinalBubble(
     120 *
     overallAlpha
   );
+
 
   ellipse(
     -b.size * 0.22,
@@ -2145,6 +2843,7 @@ function drawFinalBubble(
     70 *
     overallAlpha
   );
+
 
   ellipse(
     b.size * 0.25,
@@ -2267,11 +2966,14 @@ function mousePressed() {
 
       drawingPoints.push({
 
-        x: mouseX,
+        x:
+          mouseX,
 
-        y: mouseY,
+        y:
+          mouseY,
 
-        newStroke: true
+        newStroke:
+          true
       });
     }
 
@@ -2318,11 +3020,14 @@ function mouseDragged() {
 
       drawingPoints.push({
 
-        x: mouseX,
+        x:
+          mouseX,
 
-        y: mouseY,
+        y:
+          mouseY,
 
-        newStroke: false
+        newStroke:
+          false
       });
     }
   }
@@ -2343,7 +3048,8 @@ function deviceShaken() {
     !popStarted
   ) {
 
-    popStarted = true;
+    popStarted =
+      true;
 
     popStartTime =
       millis();
@@ -2377,6 +3083,7 @@ function drawSparkle(
     y
   );
 
+
   noStroke();
 
   fill(
@@ -2386,51 +3093,62 @@ function drawSparkle(
     180
   );
 
+
   beginShape();
+
 
   vertex(
     0,
     -size
   );
 
+
   vertex(
     size * 0.25,
     -size * 0.25
   );
+
 
   vertex(
     size,
     0
   );
 
+
   vertex(
     size * 0.25,
     size * 0.25
   );
+
 
   vertex(
     0,
     size
   );
 
+
   vertex(
     -size * 0.25,
     size * 0.25
   );
+
 
   vertex(
     -size,
     0
   );
 
+
   vertex(
     -size * 0.25,
     -size * 0.25
   );
 
+
   endShape(
     CLOSE
   );
+
 
   pop();
 }
