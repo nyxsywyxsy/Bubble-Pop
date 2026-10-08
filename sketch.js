@@ -1,4 +1,4 @@
-```js
+
 let minion = null;
 let imageReady = false;
 
@@ -1152,4 +1152,3 @@ function drawMinionInsideBubble(
         x + shift,
         y,
         im
-```
