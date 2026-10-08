@@ -1,4 +1,5 @@
 let minion;
+let tiltAmount = 0;
 
 // --------------------------------
 // SETUP
@@ -282,6 +283,35 @@ function draw() {
 
 
   // --------------------------------
+  // HIDDEN MINION
+  // --------------------------------
+
+  let minionOpacity = map(
+    tiltAmount,
+    0,
+    45,
+    10,
+    180,
+    true
+  );
+
+  if (minion) {
+
+    tint(255, minionOpacity);
+
+    image(
+      minion,
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.42,
+      bubbleSize * 0.42
+    );
+
+    noTint();
+  }
+
+
+  // --------------------------------
   // TEXT
   // --------------------------------
 
@@ -326,6 +356,19 @@ function draw() {
     bubbleY + bubbleSize * 0.43,
     bubbleSize * 0.018
   );
+}
+
+
+// --------------------------------
+// PHONE TILT
+// --------------------------------
+
+function deviceMoved() {
+
+  let xTilt = abs(rotationX);
+  let yTilt = abs(rotationY);
+
+  tiltAmount = max(xTilt, yTilt);
 }
 
 
