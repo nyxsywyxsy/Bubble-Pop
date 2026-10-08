@@ -61,7 +61,14 @@ let finalBubbles = [];
 let finalBubbleStartTime = 0;
 let finalBubbleDuration = 6000;
 
-let finalBubbleCount = 90;
+let finalBubbleCount = 100;
+
+
+// --------------------------------
+// FINAL BUBBLE POPPING
+// --------------------------------
+
+let finalBubblePopAnimations = [];
 
 
 // --------------------------------
@@ -1486,8 +1493,6 @@ function drawPopAnimation() {
     );
 
 
-  // Stronger easing for a quick burst
-
   let eased =
     1 -
     pow(
@@ -1506,9 +1511,6 @@ function drawPopAnimation() {
   // --------------------------------
   // SPLASH STREAKS
   // --------------------------------
-
-  // These replace the old circular rings.
-  // They shoot outward like a splash.
 
   for (
     let i = 0;
@@ -1818,8 +1820,6 @@ function drawPopAnimation() {
       0.985;
 
 
-    // Direction of movement
-
     let direction =
       atan2(
         d.vy,
@@ -1850,10 +1850,6 @@ function drawPopAnimation() {
     );
 
 
-    // --------------------------------
-    // ELONGATED DROPLET
-    // --------------------------------
-
     noStroke();
 
     fill(
@@ -1875,10 +1871,6 @@ function drawPopAnimation() {
       dropletLength
     );
 
-
-    // --------------------------------
-    // DROPLET HIGHLIGHT
-    // --------------------------------
 
     fill(
       255,
@@ -2203,6 +2195,8 @@ function startFinalBubbles() {
 
   finalBubbles = [];
 
+  finalBubblePopAnimations = [];
+
 
   for (
     let i = 0;
@@ -2269,7 +2263,10 @@ function startFinalBubbles() {
         random(
           -0.2,
           0.2
-        )
+        ),
+
+      popping:
+        false
     });
   }
 }
@@ -2311,35 +2308,8 @@ function drawFinalBubbleEffect() {
 
 
   // --------------------------------
-  // PHONE TILT
-  // --------------------------------
-
-  let tiltX = 0;
-  let tiltY = 0;
-
-
-  if (
-    window.sensorsEnabled
-  ) {
-
-    tiltX =
-      constrain(
-        rotationY,
-        -45,
-        45
-      );
-
-    tiltY =
-      constrain(
-        rotationX,
-        -45,
-        45
-      );
-  }
-
-
-  // --------------------------------
-  // MOVE BUBBLES
+  // MOVE BUBBLES UPWARD
+  // NO PHONE TILT
   // --------------------------------
 
   for (
@@ -2352,62 +2322,23 @@ function drawFinalBubbleEffect() {
       finalBubbles[i];
 
 
+    // Skip bubbles currently popping
+
+    if (
+      b.popping
+    ) {
+
+      continue;
+    }
+
+
     // Natural upward movement
 
-    b.vy -=
-      0.005;
-
-
-    // Tilt pushes bubbles
-
-    b.vx +=
-      map(
-        tiltX,
-        -45,
-        45,
-        -0.035,
-        0.035
-      );
-
-
-    b.vy +=
-      map(
-        tiltY,
-        -45,
-        45,
-        -0.025,
-        0.025
-      );
-
-
-    // Limit speed
-
-    b.vx =
-      constrain(
-        b.vx,
-        -2.5,
-        2.5
-      );
-
-
-    b.vy =
-      constrain(
-        b.vy,
-        -2.5,
-        2.5
-      );
-
-
-    b.x +=
-      b.vx;
-
-
-    b.y +=
-      b.vy -
+    b.y -=
       b.speed;
 
 
-    // Gentle natural drift
+    // Gentle natural horizontal movement
 
     b.x +=
       sin(
@@ -2422,7 +2353,7 @@ function drawFinalBubbleEffect() {
 
 
     // --------------------------------
-    // SCREEN BOUNCE
+    // SCREEN SIDES
     // --------------------------------
 
     if (
@@ -2432,9 +2363,6 @@ function drawFinalBubbleEffect() {
 
       b.x =
         b.size / 2;
-
-      b.vx *=
-        -0.8;
     }
 
 
@@ -2447,9 +2375,6 @@ function drawFinalBubbleEffect() {
       b.x =
         width -
         b.size / 2;
-
-      b.vx *=
-        -0.8;
     }
 
 
@@ -2471,153 +2396,6 @@ function drawFinalBubbleEffect() {
 
       b.x =
         random(width);
-
-      b.vy =
-        random(
-          -0.2,
-          0.2
-        );
-    }
-  }
-
-
-  // --------------------------------
-  // BUBBLE COLLISIONS
-  // --------------------------------
-
-  for (
-    let i = 0;
-    i < finalBubbles.length;
-    i++
-  ) {
-
-    for (
-      let j = i + 1;
-      j < finalBubbles.length;
-      j++
-    ) {
-
-      let a =
-        finalBubbles[i];
-
-      let b =
-        finalBubbles[j];
-
-
-      let dx =
-        b.x -
-        a.x;
-
-      let dy =
-        b.y -
-        a.y;
-
-
-      let distance =
-        sqrt(
-          dx * dx +
-          dy * dy
-        );
-
-
-      let minimumDistance =
-        (
-          a.size +
-          b.size
-        ) / 2;
-
-
-      if (
-        distance > 0 &&
-        distance <
-        minimumDistance
-      ) {
-
-        let nx =
-          dx /
-          distance;
-
-        let ny =
-          dy /
-          distance;
-
-
-        let overlap =
-          minimumDistance -
-          distance;
-
-
-        // Push bubbles apart
-
-        a.x -=
-          nx *
-          overlap *
-          0.5;
-
-        a.y -=
-          ny *
-          overlap *
-          0.5;
-
-
-        b.x +=
-          nx *
-          overlap *
-          0.5;
-
-        b.y +=
-          ny *
-          overlap *
-          0.5;
-
-
-        // Relative velocity
-
-        let relativeVelocity =
-          (
-            b.vx -
-            a.vx
-          ) *
-          nx +
-          (
-            b.vy -
-            a.vy
-          ) *
-          ny;
-
-
-        // Only bounce if moving toward each other
-
-        if (
-          relativeVelocity < 0
-        ) {
-
-          let bounceStrength =
-            0.85;
-
-
-          a.vx +=
-            nx *
-            relativeVelocity *
-            bounceStrength;
-
-          a.vy +=
-            ny *
-            relativeVelocity *
-            bounceStrength;
-
-
-          b.vx -=
-            nx *
-            relativeVelocity *
-            bounceStrength;
-
-          b.vy -=
-            ny *
-            relativeVelocity *
-            bounceStrength;
-        }
-      }
     }
   }
 
@@ -2632,10 +2410,52 @@ function drawFinalBubbleEffect() {
     i++
   ) {
 
-    drawFinalBubble(
-      finalBubbles[i],
-      bubbleAlpha
+    let b =
+      finalBubbles[i];
+
+
+    if (
+      !b.popping
+    ) {
+
+      drawFinalBubble(
+        b,
+        bubbleAlpha
+      );
+    }
+  }
+
+
+  // --------------------------------
+  // DRAW BUBBLE POP ANIMATIONS
+  // --------------------------------
+
+  for (
+    let i = finalBubblePopAnimations.length - 1;
+    i >= 0;
+    i--
+  ) {
+
+    let animation =
+      finalBubblePopAnimations[i];
+
+
+    drawFinalBubblePopAnimation(
+      animation
     );
+
+
+    if (
+      millis() -
+      animation.startTime >
+      popDuration
+    ) {
+
+      finalBubblePopAnimations.splice(
+        i,
+        1
+      );
+    }
   }
 
 
@@ -2713,7 +2533,10 @@ function drawFinalBubbleEffect() {
           random(
             -0.2,
             0.2
-          )
+          ),
+
+        popping:
+          false
       });
     }
   }
@@ -3060,6 +2883,524 @@ function drawFinalBubble(
 
 
 // --------------------------------
+// FINAL BUBBLE POP ANIMATION
+// SAME SPLASH STYLE AS MAIN POP
+// --------------------------------
+
+function drawFinalBubblePopAnimation(
+  animation
+) {
+
+  let elapsed =
+    millis() -
+    animation.startTime;
+
+  let progress =
+    constrain(
+      elapsed /
+      popDuration,
+      0,
+      1
+    );
+
+
+  let eased =
+    1 -
+    pow(
+      1 - progress,
+      3
+    );
+
+
+  let centerX =
+    animation.x;
+
+  let centerY =
+    animation.y;
+
+
+  // --------------------------------
+  // SPLASH STREAKS
+  // --------------------------------
+
+  for (
+    let i = 0;
+    i < 14;
+    i++
+  ) {
+
+    let angle =
+      i * (360 / 14) +
+      sin(i * 41) * 12;
+
+
+    let delay =
+      (i % 4) *
+      0.035;
+
+
+    let splashProgress =
+      constrain(
+        (progress - delay) /
+        (1 - delay),
+        0,
+        1
+      );
+
+
+    let splashEased =
+      1 -
+      pow(
+        1 - splashProgress,
+        2.5
+      );
+
+
+    let innerDistance =
+      min(width, height) *
+      0.02;
+
+
+    let outerDistance =
+      min(width, height) *
+      (
+        0.10 +
+        (i % 3) *
+        0.035
+      );
+
+
+    let startDistance =
+      innerDistance +
+      splashEased *
+      outerDistance;
+
+
+    let streakLength =
+      min(width, height) *
+      (
+        0.015 +
+        splashEased *
+        0.035
+      );
+
+
+    let startX =
+      centerX +
+      cos(angle) *
+      startDistance;
+
+    let startY =
+      centerY +
+      sin(angle) *
+      startDistance;
+
+
+    let endX =
+      centerX +
+      cos(angle) *
+      (
+        startDistance +
+        streakLength
+      );
+
+    let endY =
+      centerY +
+      sin(angle) *
+      (
+        startDistance +
+        streakLength
+      );
+
+
+    let alpha =
+      190 *
+      (
+        1 -
+        splashProgress
+      );
+
+
+    stroke(
+      255,
+      255,
+      255,
+      alpha
+    );
+
+    strokeWeight(
+      min(width, height) *
+      0.004
+    );
+
+    strokeCap(ROUND);
+
+
+    line(
+      startX,
+      startY,
+      endX,
+      endY
+    );
+  }
+
+
+  // --------------------------------
+  // COLOURED SPLASH STREAKS
+  // --------------------------------
+
+  let splashColours = [
+
+    [0, 220, 255],
+
+    [170, 80, 255],
+
+    [255, 80, 180],
+
+    [100, 255, 190],
+
+    [255, 230, 100]
+  ];
+
+
+  for (
+    let i = 0;
+    i < splashColours.length;
+    i++
+  ) {
+
+    let angle =
+      i * 72 +
+      18;
+
+
+    let splashProgress =
+      constrain(
+        progress -
+        i * 0.045,
+        0,
+        1
+      );
+
+
+    let splashEased =
+      1 -
+      pow(
+        1 - splashProgress,
+        2.5
+      );
+
+
+    let distance =
+      min(width, height) *
+      (
+        0.035 +
+        splashEased *
+        0.18
+      );
+
+
+    let length =
+      min(width, height) *
+      (
+        0.02 +
+        splashEased *
+        0.02
+      );
+
+
+    let x1 =
+      centerX +
+      cos(angle) *
+      distance;
+
+    let y1 =
+      centerY +
+      sin(angle) *
+      distance;
+
+
+    let x2 =
+      centerX +
+      cos(angle) *
+      (
+        distance +
+        length
+      );
+
+    let y2 =
+      centerY +
+      sin(angle) *
+      (
+        distance +
+        length
+      );
+
+
+    stroke(
+      splashColours[i][0],
+      splashColours[i][1],
+      splashColours[i][2],
+      170 *
+      (
+        1 -
+        splashProgress
+      )
+    );
+
+
+    strokeWeight(
+      min(width, height) *
+      0.006
+    );
+
+
+    strokeCap(ROUND);
+
+
+    line(
+      x1,
+      y1,
+      x2,
+      y2
+    );
+  }
+
+
+  // --------------------------------
+  // CENTRAL FLASH
+  // --------------------------------
+
+  noStroke();
+
+  fill(
+    255,
+    255,
+    255,
+    170 *
+    (
+      1 -
+      progress
+    )
+  );
+
+
+  let flashSize =
+    min(width, height) *
+    0.07 *
+    eased;
+
+
+  ellipse(
+    centerX,
+    centerY,
+    flashSize,
+    flashSize
+  );
+
+
+  // --------------------------------
+  // POP DROPLETS
+  // --------------------------------
+
+  for (
+    let i = 0;
+    i < animation.droplets.length;
+    i++
+  ) {
+
+    let d =
+      animation.droplets[i];
+
+
+    d.x +=
+      d.vx;
+
+    d.y +=
+      d.vy;
+
+    d.vy +=
+      0.018;
+
+
+    d.alpha *=
+      0.985;
+
+
+    let direction =
+      atan2(
+        d.vy,
+        d.vx
+      );
+
+
+    let stretch =
+      d.size *
+      2.8;
+
+
+    let dropletLength =
+      d.size *
+      1.7;
+
+
+    push();
+
+    translate(
+      d.x,
+      d.y
+    );
+
+
+    rotate(
+      direction
+    );
+
+
+    noStroke();
+
+    fill(
+      d.r,
+      d.g,
+      d.b,
+      d.alpha *
+      (
+        1 -
+        progress * 0.5
+      )
+    );
+
+
+    ellipse(
+      0,
+      0,
+      stretch,
+      dropletLength
+    );
+
+
+    fill(
+      255,
+      255,
+      255,
+      d.alpha *
+      0.35 *
+      (
+        1 -
+        progress
+      )
+    );
+
+
+    ellipse(
+      -d.size * 0.35,
+      -d.size * 0.25,
+      d.size * 0.55,
+      d.size * 0.25
+    );
+
+
+    pop();
+  }
+}
+
+
+// --------------------------------
+// CREATE FINAL BUBBLE POP
+// --------------------------------
+
+function createFinalBubblePop(
+  bubble
+) {
+
+  let popDroplets = [];
+
+
+  for (
+    let i = 0;
+    i < 20;
+    i++
+  ) {
+
+    let angle =
+      random(360);
+
+
+    let speed =
+      random(
+        1,
+        4.5
+      );
+
+
+    popDroplets.push({
+
+      x:
+        bubble.x,
+
+      y:
+        bubble.y,
+
+      vx:
+        cos(angle) *
+        speed,
+
+      vy:
+        sin(angle) *
+        speed,
+
+      size:
+        random(
+          2,
+          6
+        ),
+
+      r:
+        random(
+          100,
+          255
+        ),
+
+      g:
+        random(
+          100,
+          255
+        ),
+
+      b:
+        random(
+          180,
+          255
+        ),
+
+      alpha:
+        220
+    });
+  }
+
+
+  finalBubblePopAnimations.push({
+
+    x:
+      bubble.x,
+
+    y:
+      bubble.y,
+
+    startTime:
+      millis(),
+
+    droplets:
+      popDroplets
+  });
+
+
+  bubble.popping =
+    true;
+}
+
+
+// --------------------------------
 // DRAWING INPUT
 // --------------------------------
 
@@ -3180,6 +3521,56 @@ function mousePressed() {
     }
 
     return false;
+  }
+
+
+  // --------------------------------
+  // FINAL BUBBLE TAP TO POP
+  // --------------------------------
+
+  if (
+    contributionSubmitted
+  ) {
+
+    for (
+      let i = finalBubbles.length - 1;
+      i >= 0;
+      i--
+    ) {
+
+      let b =
+        finalBubbles[i];
+
+
+      if (
+        b.popping
+      ) {
+
+        continue;
+      }
+
+
+      let distance =
+        dist(
+          mouseX,
+          mouseY,
+          b.x,
+          b.y
+        );
+
+
+      if (
+        distance <=
+        b.size / 2
+      ) {
+
+        createFinalBubblePop(
+          b
+        );
+
+        return false;
+      }
+    }
   }
 }
 
