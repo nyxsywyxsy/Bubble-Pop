@@ -1,5 +1,11 @@
 let minion;
 
+// --------------------------------
+// TILT
+// --------------------------------
+
+let tiltAmount = 0;
+
 function preload() {
   minion = loadImage("minion.jpg");
 }
@@ -28,6 +34,7 @@ function draw() {
 
   // Dark transparent centre
   fill(2, 15, 18, 210);
+
   ellipse(
     bubbleX,
     bubbleY,
@@ -36,6 +43,7 @@ function draw() {
 
   // Very subtle teal inside the bubble
   fill(0, 70, 75, 35);
+
   ellipse(
     bubbleX - bubbleSize * 0.04,
     bubbleY - bubbleSize * 0.03,
@@ -46,12 +54,11 @@ function draw() {
   // IRIDESCENT BUBBLE FILM
   // --------------------------------
 
-  // Large soft colour reflections
-
   noStroke();
 
   // Cyan
   fill(20, 220, 240, 45);
+
   ellipse(
     bubbleX - bubbleSize * 0.28,
     bubbleY - bubbleSize * 0.12,
@@ -61,6 +68,7 @@ function draw() {
 
   // Purple
   fill(170, 70, 255, 45);
+
   ellipse(
     bubbleX - bubbleSize * 0.10,
     bubbleY - bubbleSize * 0.35,
@@ -70,6 +78,7 @@ function draw() {
 
   // Pink
   fill(255, 70, 180, 50);
+
   ellipse(
     bubbleX + bubbleSize * 0.20,
     bubbleY - bubbleSize * 0.30,
@@ -79,6 +88,7 @@ function draw() {
 
   // Blue
   fill(70, 150, 255, 45);
+
   ellipse(
     bubbleX + bubbleSize * 0.34,
     bubbleY,
@@ -88,6 +98,7 @@ function draw() {
 
   // Green
   fill(80, 255, 190, 42);
+
   ellipse(
     bubbleX + bubbleSize * 0.18,
     bubbleY + bubbleSize * 0.28,
@@ -97,6 +108,7 @@ function draw() {
 
   // Yellow
   fill(255, 230, 100, 35);
+
   ellipse(
     bubbleX - bubbleSize * 0.20,
     bubbleY + bubbleSize * 0.30,
@@ -127,6 +139,7 @@ function draw() {
 
   // Pink
   stroke(255, 100, 190, 170);
+
   arc(
     bubbleX,
     bubbleY,
@@ -138,6 +151,7 @@ function draw() {
 
   // Purple
   stroke(170, 100, 255, 170);
+
   arc(
     bubbleX,
     bubbleY,
@@ -149,6 +163,7 @@ function draw() {
 
   // Blue
   stroke(80, 190, 255, 180);
+
   arc(
     bubbleX,
     bubbleY,
@@ -160,6 +175,7 @@ function draw() {
 
   // Cyan
   stroke(80, 240, 230, 180);
+
   arc(
     bubbleX,
     bubbleY,
@@ -171,6 +187,7 @@ function draw() {
 
   // Green
   stroke(150, 255, 180, 150);
+
   arc(
     bubbleX,
     bubbleY,
@@ -182,6 +199,7 @@ function draw() {
 
   // Yellow
   stroke(255, 230, 120, 150);
+
   arc(
     bubbleX,
     bubbleY,
@@ -225,7 +243,6 @@ function draw() {
   // --------------------------------
 
   noStroke();
-
   fill(255, 255, 255, 180);
 
   ellipse(
@@ -252,7 +269,20 @@ function draw() {
   // HIDDEN MINION
   // --------------------------------
 
-  tint(255, 25);
+  // Map phone tilt to Minion opacity.
+  // Small tilt = slightly visible.
+  // Larger tilt = increasingly visible.
+
+  let minionOpacity = map(
+    abs(tiltAmount),
+    0,
+    45,
+    25,
+    180,
+    true
+  );
+
+  tint(255, minionOpacity);
 
   image(
     minion,
@@ -279,8 +309,8 @@ function draw() {
 
   text(
     "reveal what's hidden",
-    bubbleX,
-    bubbleY
+    width / 2,
+    height * 0.10
   );
 
   // --------------------------------
@@ -309,6 +339,17 @@ function draw() {
   );
 }
 
+// --------------------------------
+// DEVICE ORIENTATION
+// --------------------------------
+
+function deviceOrientation(alpha, beta, gamma) {
+  // beta = front/back tilt
+  // gamma = left/right tilt
+
+  // Use whichever direction has the stronger tilt.
+  tiltAmount = max(abs(beta), abs(gamma));
+}
 
 // --------------------------------
 // SPARKLE FUNCTION
@@ -332,7 +373,6 @@ function drawSparkle(x, y, size) {
     y + size * 0.6
   );
 }
-
 
 // --------------------------------
 // RESIZE
