@@ -10,105 +10,109 @@ function setup() {
 }
 
 function draw() {
-  // Black background
-  background(3, 8, 10);
+  // --------------------------------
+  // BACKGROUND
+  // --------------------------------
+
+  background(0);
 
   let bubbleX = width / 2;
   let bubbleY = height / 2;
-  let bubbleSize = min(width, height) * 0.72;
+  let bubbleSize = min(width, height) * 0.62;
 
-  // -------------------------
-  // INSTRUCTION
-  // -------------------------
-
-  fill(255, 255, 255, 210);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(min(width, height) * 0.045);
-  text("reveal what's hidden", width / 2, height * 0.10);
-
-  // -------------------------
-  // BUBBLE BASE
-  // -------------------------
+  // --------------------------------
+  // BUBBLE DARK CENTRE
+  // --------------------------------
 
   noStroke();
 
-  // Dark teal transparent centre
-  fill(5, 65, 70, 70);
-  ellipse(bubbleX, bubbleY, bubbleSize);
-
-  // Soft teal inner layer
-  fill(20, 120, 125, 30);
+  // Dark transparent centre
+  fill(2, 15, 18, 210);
   ellipse(
-    bubbleX - bubbleSize * 0.02,
-    bubbleY - bubbleSize * 0.02,
-    bubbleSize * 0.92
-  );
-
-  // -------------------------
-  // IRIDESCENT COLOUR
-  // -------------------------
-
-  // Pink / purple glow
-  fill(255, 80, 180, 22);
-  ellipse(
-    bubbleX - bubbleSize * 0.16,
-    bubbleY - bubbleSize * 0.20,
-    bubbleSize * 0.55
-  );
-
-  // Blue glow
-  fill(50, 150, 255, 25);
-  ellipse(
-    bubbleX + bubbleSize * 0.18,
-    bubbleY - bubbleSize * 0.10,
-    bubbleSize * 0.52
-  );
-
-  // Green glow
-  fill(80, 255, 190, 20);
-  ellipse(
-    bubbleX + bubbleSize * 0.15,
-    bubbleY + bubbleSize * 0.20,
-    bubbleSize * 0.55
-  );
-
-  // Yellow / orange glow
-  fill(255, 190, 60, 18);
-  ellipse(
-    bubbleX - bubbleSize * 0.20,
-    bubbleY + bubbleSize * 0.18,
-    bubbleSize * 0.48
-  );
-
-  // -------------------------
-  // HIDDEN MINION
-  // -------------------------
-
-  // Very faint image for now.
-  // Later, phone tilt will control this opacity.
-
-  tint(255, 45);
-
-  image(
-    minion,
     bubbleX,
     bubbleY,
-    bubbleSize * 0.48,
-    bubbleSize * 0.48
+    bubbleSize * 0.88
   );
 
-  noTint();
+  // Very subtle teal inside the bubble
+  fill(0, 70, 75, 35);
+  ellipse(
+    bubbleX - bubbleSize * 0.04,
+    bubbleY - bubbleSize * 0.03,
+    bubbleSize * 0.80
+  );
 
-  // -------------------------
-  // BUBBLE EDGE
-  // -------------------------
+  // --------------------------------
+  // IRIDESCENT BUBBLE FILM
+  // --------------------------------
+
+  // Large soft colour reflections
+
+  noStroke();
+
+  // Cyan
+  fill(20, 220, 240, 45);
+  ellipse(
+    bubbleX - bubbleSize * 0.28,
+    bubbleY - bubbleSize * 0.12,
+    bubbleSize * 0.38,
+    bubbleSize * 0.65
+  );
+
+  // Purple
+  fill(170, 70, 255, 45);
+  ellipse(
+    bubbleX - bubbleSize * 0.10,
+    bubbleY - bubbleSize * 0.35,
+    bubbleSize * 0.45,
+    bubbleSize * 0.35
+  );
+
+  // Pink
+  fill(255, 70, 180, 50);
+  ellipse(
+    bubbleX + bubbleSize * 0.20,
+    bubbleY - bubbleSize * 0.30,
+    bubbleSize * 0.48,
+    bubbleSize * 0.35
+  );
+
+  // Blue
+  fill(70, 150, 255, 45);
+  ellipse(
+    bubbleX + bubbleSize * 0.34,
+    bubbleY,
+    bubbleSize * 0.28,
+    bubbleSize * 0.55
+  );
+
+  // Green
+  fill(80, 255, 190, 42);
+  ellipse(
+    bubbleX + bubbleSize * 0.18,
+    bubbleY + bubbleSize * 0.28,
+    bubbleSize * 0.45,
+    bubbleSize * 0.30
+  );
+
+  // Yellow
+  fill(255, 230, 100, 35);
+  ellipse(
+    bubbleX - bubbleSize * 0.20,
+    bubbleY + bubbleSize * 0.30,
+    bubbleSize * 0.45,
+    bubbleSize * 0.25
+  );
+
+  // --------------------------------
+  // IRIDESCENT EDGE
+  // --------------------------------
 
   noFill();
 
-  // Outer teal edge
-  stroke(80, 220, 220, 110);
-  strokeWeight(3);
+  // Soft outer glow
+  strokeWeight(12);
+  stroke(100, 220, 255, 25);
 
   ellipse(
     bubbleX,
@@ -117,97 +121,222 @@ function draw() {
     bubbleSize
   );
 
-  // Rainbow edge sections
-  strokeWeight(6);
+  // Main thin rainbow edge
+
+  strokeWeight(5);
 
   // Pink
-  stroke(255, 100, 190, 120);
+  stroke(255, 100, 190, 170);
   arc(
     bubbleX,
     bubbleY,
     bubbleSize * 0.98,
     bubbleSize * 0.98,
     PI * 1.05,
-    PI * 1.45
+    PI * 1.48
   );
 
-  // Purple / blue
-  stroke(120, 120, 255, 120);
+  // Purple
+  stroke(170, 100, 255, 170);
   arc(
     bubbleX,
     bubbleY,
-    bubbleSize * 0.99,
-    bubbleSize * 0.99,
-    PI * 1.45,
-    PI * 1.85
+    bubbleSize * 0.98,
+    bubbleSize * 0.98,
+    PI * 1.48,
+    PI * 1.75
+  );
+
+  // Blue
+  stroke(80, 190, 255, 180);
+  arc(
+    bubbleX,
+    bubbleY,
+    bubbleSize * 0.98,
+    bubbleSize * 0.98,
+    PI * 1.75,
+    PI * 2.05
   );
 
   // Cyan
-  stroke(80, 240, 240, 120);
+  stroke(80, 240, 230, 180);
   arc(
     bubbleX,
     bubbleY,
-    bubbleSize * 0.99,
-    bubbleSize * 0.99,
-    PI * 1.85,
-    PI * 2.25
+    bubbleSize * 0.98,
+    bubbleSize * 0.98,
+    PI * 2.05,
+    PI * 2.35
   );
 
-  // Green / yellow
-  stroke(150, 255, 180, 100);
+  // Green
+  stroke(150, 255, 180, 150);
   arc(
     bubbleX,
     bubbleY,
-    bubbleSize * 0.99,
-    bubbleSize * 0.99,
-    PI * 2.25,
-    PI * 2.65
+    bubbleSize * 0.98,
+    bubbleSize * 0.98,
+    PI * 2.35,
+    PI * 2.60
   );
 
-  // -------------------------
-  // BUBBLE HIGHLIGHTS
-  // -------------------------
+  // Yellow
+  stroke(255, 230, 120, 150);
+  arc(
+    bubbleX,
+    bubbleY,
+    bubbleSize * 0.98,
+    bubbleSize * 0.98,
+    PI * 2.60,
+    PI * 2.90
+  );
 
-  stroke(255, 255, 255, 170);
+  // --------------------------------
+  // CURVED REFLECTIONS
+  // --------------------------------
+
+  stroke(255, 255, 255, 150);
   strokeWeight(4);
 
+  // Large curved white reflection
   arc(
-    bubbleX - bubbleSize * 0.12,
-    bubbleY - bubbleSize * 0.12,
-    bubbleSize * 0.68,
-    bubbleSize * 0.68,
+    bubbleX - bubbleSize * 0.14,
+    bubbleY - bubbleSize * 0.13,
+    bubbleSize * 0.65,
+    bubbleSize * 0.65,
     PI * 1.05,
-    PI * 1.42
+    PI * 1.45
   );
 
   stroke(255, 255, 255, 100);
   strokeWeight(2);
 
   arc(
-    bubbleX + bubbleSize * 0.08,
-    bubbleY + bubbleSize * 0.10,
-    bubbleSize * 0.82,
-    bubbleSize * 0.82,
+    bubbleX + bubbleSize * 0.13,
+    bubbleY + bubbleSize * 0.12,
+    bubbleSize * 0.70,
+    bubbleSize * 0.70,
     0,
     HALF_PI
   );
 
-  // Small bubble shine
+  // --------------------------------
+  // BRIGHT REFLECTION SPOTS
+  // --------------------------------
+
   noStroke();
-  fill(255, 255, 255, 130);
+
+  fill(255, 255, 255, 180);
 
   ellipse(
-    bubbleX - bubbleSize * 0.27,
-    bubbleY - bubbleSize * 0.27,
+    bubbleX - bubbleSize * 0.25,
+    bubbleY - bubbleSize * 0.25,
+    bubbleSize * 0.045
+  );
+
+  ellipse(
+    bubbleX + bubbleSize * 0.27,
+    bubbleY - bubbleSize * 0.17,
     bubbleSize * 0.035
   );
 
+  fill(255, 255, 255, 100);
+
   ellipse(
-    bubbleX - bubbleSize * 0.22,
-    bubbleY - bubbleSize * 0.23,
+    bubbleX - bubbleSize * 0.32,
+    bubbleY - bubbleSize * 0.03,
+    bubbleSize * 0.025
+  );
+
+  // --------------------------------
+  // HIDDEN MINION
+  // --------------------------------
+
+  tint(255, 25);
+
+  image(
+    minion,
+    bubbleX,
+    bubbleY,
+    bubbleSize * 0.42,
+    bubbleSize * 0.42
+  );
+
+  noTint();
+
+  // --------------------------------
+  // TEXT
+  // --------------------------------
+
+  textAlign(CENTER, CENTER);
+
+  // Elegant serif-style font
+  textFont("Georgia");
+
+  fill(255, 255, 255, 230);
+
+  textSize(min(width, height) * 0.045);
+
+  text(
+    "reveal what's hidden",
+    bubbleX,
+    bubbleY
+  );
+
+  // --------------------------------
+  // SMALL SPARKLES
+  // --------------------------------
+
+  stroke(255, 255, 255, 170);
+  strokeWeight(1.5);
+
+  drawSparkle(
+    bubbleX - bubbleSize * 0.39,
+    bubbleY - bubbleSize * 0.10,
+    bubbleSize * 0.025
+  );
+
+  drawSparkle(
+    bubbleX + bubbleSize * 0.39,
+    bubbleY - bubbleSize * 0.25,
+    bubbleSize * 0.02
+  );
+
+  drawSparkle(
+    bubbleX + bubbleSize * 0.28,
+    bubbleY + bubbleSize * 0.43,
     bubbleSize * 0.018
   );
 }
+
+
+// --------------------------------
+// SPARKLE FUNCTION
+// --------------------------------
+
+function drawSparkle(x, y, size) {
+  line(x - size, y, x + size, y);
+  line(x, y - size, x, y + size);
+
+  line(
+    x - size * 0.6,
+    y - size * 0.6,
+    x + size * 0.6,
+    y + size * 0.6
+  );
+
+  line(
+    x + size * 0.6,
+    y - size * 0.6,
+    x - size * 0.6,
+    y + size * 0.6
+  );
+}
+
+
+// --------------------------------
+// RESIZE
+// --------------------------------
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
