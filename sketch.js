@@ -11,8 +11,8 @@ let popStartTime = 0;
 
 let lastShake = 0;
 
-// Pop animation length
-let popDuration = 900;
+// Slower pop animation
+let popDuration = 1500;
 
 // Droplets
 let droplets = [];
@@ -31,8 +31,8 @@ async function setup() {
   // Phone motion permission
   enableGyroTap('Tap to enable motion sensors');
 
-  // Higher threshold = harder shake
-  setShakeThreshold(70);
+  // Higher number = harder shake
+  setShakeThreshold(110);
 
   angleMode(DEGREES);
 
@@ -71,10 +71,8 @@ function draw() {
 
   if (window.sensorsEnabled) {
 
-    // Forward/back tilt
     tilt = abs(rotationX);
 
-    // Keep it within a useful range
     tilt = constrain(tilt, 0, 90);
   }
 
@@ -82,9 +80,6 @@ function draw() {
   // --------------------------------
   // GRADUAL REVEAL
   // --------------------------------
-
-  // 0 degrees = hidden
-  // 60 degrees = fully visible
 
   let revealAmount = map(
     tilt,
@@ -105,21 +100,43 @@ function draw() {
   // DISTORTION
   // --------------------------------
 
-  // Distortion starts after the image
-  // has already begun appearing.
+  // Starts becoming noticeable around 35 degrees
+  // and becomes very strong near 90 degrees.
 
   let distortionAmount = map(
     tilt,
-    25,
-    80,
+    35,
+    90,
     0,
-    22
+    45
   );
 
   distortionAmount = constrain(
     distortionAmount,
     0,
-    22
+    45
+  );
+
+
+  // --------------------------------
+  // CONTRAST
+  // --------------------------------
+
+  // Normal image starts at 100%.
+  // At maximum tilt it becomes much higher contrast.
+
+  let contrastAmount = map(
+    tilt,
+    45,
+    90,
+    100,
+    175
+  );
+
+  contrastAmount = constrain(
+    contrastAmount,
+    100,
+    175
   );
 
 
@@ -140,7 +157,11 @@ function draw() {
     // MINION INSIDE BUBBLE
     // --------------------------------
 
+    // The Minion disappears as soon as
+    // the bubble starts popping.
+
     if (
+      !popStarted &&
       imageReady &&
       minion &&
       revealAmount > 0
@@ -151,7 +172,8 @@ function draw() {
         bubbleY,
         bubbleSize,
         revealAmount,
-        distortionAmount
+        distortionAmount,
+        contrastAmount
       );
     }
   }
@@ -172,23 +194,6 @@ function draw() {
 
 
   // --------------------------------
-  // AFTER POP
-  // --------------------------------
-
-  if (bubblePopped && !popStarted) {
-
-    if (imageReady && minion) {
-
-      drawFullMinion(
-        bubbleX,
-        bubbleY,
-        bubbleSize
-      );
-    }
-  }
-
-
-  // --------------------------------
   // TEXT
   // --------------------------------
 
@@ -196,7 +201,12 @@ function draw() {
 
   textFont("Georgia");
 
-  fill(255, 255, 255, 230);
+  fill(
+    255,
+    255,
+    255,
+    230
+  );
 
   textSize(
     min(width, height) * 0.045
@@ -222,7 +232,7 @@ function draw() {
 
 
   // --------------------------------
-  // UPDATE POP
+  // FINISH POP
   // --------------------------------
 
   if (popStarted) {
@@ -233,6 +243,7 @@ function draw() {
     if (elapsed > popDuration) {
 
       popStarted = false;
+
       bubblePopped = true;
     }
   }
@@ -291,8 +302,6 @@ function drawBubble(
   // IRIDESCENT FILM
   // --------------------------------
 
-  // Cyan
-
   fill(
     20,
     220,
@@ -307,8 +316,6 @@ function drawBubble(
     bubbleSize * 0.65
   );
 
-
-  // Purple
 
   fill(
     170,
@@ -325,8 +332,6 @@ function drawBubble(
   );
 
 
-  // Pink
-
   fill(
     255,
     70,
@@ -341,8 +346,6 @@ function drawBubble(
     bubbleSize * 0.35
   );
 
-
-  // Blue
 
   fill(
     70,
@@ -359,8 +362,6 @@ function drawBubble(
   );
 
 
-  // Green
-
   fill(
     80,
     255,
@@ -375,8 +376,6 @@ function drawBubble(
     bubbleSize * 0.30
   );
 
-
-  // Yellow
 
   fill(
     255,
@@ -422,9 +421,6 @@ function drawBubble(
 
   strokeWeight(5);
 
-
-  // Pink
-
   stroke(
     255,
     100,
@@ -441,8 +437,6 @@ function drawBubble(
     PI * 1.48
   );
 
-
-  // Purple
 
   stroke(
     170,
@@ -461,8 +455,6 @@ function drawBubble(
   );
 
 
-  // Blue
-
   stroke(
     80,
     190,
@@ -479,8 +471,6 @@ function drawBubble(
     PI * 2.05
   );
 
-
-  // Cyan
 
   stroke(
     80,
@@ -499,8 +489,6 @@ function drawBubble(
   );
 
 
-  // Green
-
   stroke(
     150,
     255,
@@ -517,8 +505,6 @@ function drawBubble(
     PI * 2.60
   );
 
-
-  // Yellow
 
   stroke(
     255,
@@ -653,7 +639,7 @@ function drawBubble(
 
 
 // --------------------------------
-// DRAW MINION INSIDE BUBBLE
+// MINION INSIDE BUBBLE
 // --------------------------------
 
 function drawMinionInsideBubble(
@@ -661,12 +647,16 @@ function drawMinionInsideBubble(
   y,
   size,
   opacity,
-  distortion
+  distortion,
+  contrastAmount
 ) {
 
   push();
 
-  // Circular clipping area
+  // --------------------------------
+  // FULL BUBBLE CIRCLE MASK
+  // --------------------------------
+
   drawingContext.save();
 
   drawingContext.beginPath();
@@ -674,7 +664,7 @@ function drawMinionInsideBubble(
   drawingContext.arc(
     x,
     y,
-    size * 0.43,
+    size * 0.49,
     0,
     Math.PI * 2
   );
@@ -682,23 +672,39 @@ function drawMinionInsideBubble(
   drawingContext.clip();
 
 
-  // Main image size
-  let imageSize = size * 0.86;
+  // Make Minion fill almost the entire bubble
+  let imageSize = size * 0.98;
 
 
   // --------------------------------
-  // SLIGHT DISTORTION
+  // DISTORTION STRENGTH
   // --------------------------------
 
-  // As tilt increases, the image shifts
-  // in several directions.
-
-  let shift = distortion;
+  let distortionStrength =
+    distortion / 45;
 
 
-  // Ghosted distorted layers
+  // --------------------------------
+  // HIGH CONTRAST IMAGE
+  // --------------------------------
 
-  if (distortion > 3) {
+  drawingContext.filter =
+    "contrast(" +
+    contrastAmount +
+    "%)";
+
+
+  // --------------------------------
+  // EARLY DISTORTION
+  // --------------------------------
+
+  if (distortion > 4) {
+
+    // Ghosted copies create a visual
+    // separation as the image starts breaking apart.
+
+    let ghostShift =
+      distortion * 0.8;
 
     tint(
       255,
@@ -707,7 +713,7 @@ function drawMinionInsideBubble(
 
     image(
       minion,
-      x - shift,
+      x - ghostShift,
       y,
       imageSize,
       imageSize
@@ -715,23 +721,89 @@ function drawMinionInsideBubble(
 
     image(
       minion,
-      x + shift,
+      x + ghostShift,
       y,
-      imageSize,
-      imageSize
-    );
-
-    image(
-      minion,
-      x,
-      y - shift * 0.5,
       imageSize,
       imageSize
     );
   }
 
 
-  // Main image
+  // --------------------------------
+  // HORIZONTAL DISPLACED SLICES
+  // --------------------------------
+
+  if (distortion > 12) {
+
+    noTint();
+
+    // The image is divided into horizontal
+    // sections that move in different directions.
+
+    let sliceCount = 7;
+
+    for (
+      let i = 0;
+      i < sliceCount;
+      i++
+    ) {
+
+      let sliceY =
+        y -
+        imageSize / 2 +
+        (imageSize / sliceCount) * i;
+
+      let sliceHeight =
+        imageSize / sliceCount + 2;
+
+      let direction =
+        (i % 2 === 0)
+        ? 1
+        : -1;
+
+      let shift =
+        direction *
+        distortion *
+        (0.4 + i * 0.12);
+
+
+      // Slight transparency makes the
+      // separation more visible.
+
+      tint(
+        255,
+        opacity * 0.90
+      );
+
+      drawingContext.save();
+
+      drawingContext.beginPath();
+
+      drawingContext.rect(
+        x - imageSize / 2 - 60,
+        sliceY,
+        imageSize + 120,
+        sliceHeight
+      );
+
+      drawingContext.clip();
+
+      image(
+        minion,
+        x + shift,
+        y,
+        imageSize,
+        imageSize
+      );
+
+      drawingContext.restore();
+    }
+  }
+
+
+  // --------------------------------
+  // MAIN IMAGE
+  // --------------------------------
 
   tint(
     255,
@@ -746,50 +818,10 @@ function drawMinionInsideBubble(
     imageSize
   );
 
+
   noTint();
 
-
-  drawingContext.restore();
-
-  pop();
-}
-
-
-// --------------------------------
-// FULL MINION AFTER POP
-// --------------------------------
-
-function drawFullMinion(
-  x,
-  y,
-  size
-) {
-
-  push();
-
-  drawingContext.save();
-
-  drawingContext.beginPath();
-
-  drawingContext.arc(
-    x,
-    y,
-    size * 0.43,
-    0,
-    Math.PI * 2
-  );
-
-  drawingContext.clip();
-
-
-  image(
-    minion,
-    x,
-    y,
-    size * 0.86,
-    size * 0.86
-  );
-
+  drawingContext.filter = "none";
 
   drawingContext.restore();
 
@@ -803,15 +835,15 @@ function drawFullMinion(
 
 function deviceShaken() {
 
-  // Prevent multiple triggers from one shake
-
   if (
-    millis() - lastShake > 900 &&
+    millis() - lastShake > 1200 &&
     !bubblePopped &&
     !popStarted
   ) {
 
-    bubblePopped = true;
+    // Start the animation.
+    // The bubble remains visible while it pops.
+
     popStarted = true;
 
     popStartTime = millis();
@@ -836,13 +868,17 @@ function createDroplets() {
   let centreX = width / 2;
   let centreY = height / 2;
 
-  for (let i = 0; i < 16; i++) {
+  for (
+    let i = 0;
+    i < 20;
+    i++
+  ) {
 
     let angle =
       random(0, 360);
 
     let speed =
-      random(2.5, 6);
+      random(2.5, 7);
 
     droplets.push({
 
@@ -889,10 +925,10 @@ function drawPopAnimation(
 
   let ringSize =
     bubbleSize *
-    (1 + progress * 0.45);
+    (1 + progress * 0.65);
 
   let ringAlpha =
-    180 *
+    200 *
     (1 - progress);
 
 
@@ -906,7 +942,7 @@ function drawPopAnimation(
   );
 
   strokeWeight(
-    5 * (1 - progress)
+    6 * (1 - progress)
   );
 
   ellipse(
@@ -917,7 +953,7 @@ function drawPopAnimation(
 
 
   // --------------------------------
-  // SMALL INNER RINGS
+  // SECOND RING
   // --------------------------------
 
   stroke(
@@ -932,7 +968,7 @@ function drawPopAnimation(
   ellipse(
     centreX,
     centreY,
-    ringSize * 0.88
+    ringSize * 0.86
   );
 
 
@@ -951,12 +987,13 @@ function drawPopAnimation(
     let d =
       droplets[i];
 
+
     d.x += d.vx;
+
     d.y += d.vy;
 
-    // Slight gravity
-
     d.vy += 0.06;
+
 
     d.alpha =
       230 *
@@ -977,8 +1014,7 @@ function drawPopAnimation(
     );
 
 
-    // Tiny highlight
-
+    // Small white highlight
     fill(
       255,
       255,
