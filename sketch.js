@@ -15,6 +15,7 @@ let popDuration = 1500;
 
 let droplets = [];
 
+
 // --------------------------------
 // DISTORTION MEMORY
 // --------------------------------
@@ -23,16 +24,24 @@ let distortionLevel = 0;
 
 let lastFrameTime = 0;
 
+
 // --------------------------------
-// DRAWING CONTRIBUTION
+// CONTRIBUTION STATE
 // --------------------------------
+
+let contributionActivated = false;
+let contributionSubmitted = false;
 
 let contributionFade = 0;
-let contributionSubmitted = false;
-let drawingPoints = [];
+let submissionFade = 0;
 
 let contributionStartTime = 0;
-let contributionFadeDuration = 1800;
+let submissionStartTime = 0;
+
+let contributionFadeDuration = 3000;
+let submissionFadeDuration = 2500;
+
+let drawingPoints = [];
 
 
 // --------------------------------
@@ -134,28 +143,17 @@ function draw() {
   // TIME-BASED DISTORTION
   // --------------------------------
 
-  // NOTHING happens until the phone
-  // is completely upright.
-
   if (
     tilt >= 88 &&
     !bubblePopped &&
     !popStarted
   ) {
 
-    // Very slow initial buildup.
-    //
-    // Even when upright, the effect
-    // takes a long time to become obvious.
-
     distortionLevel +=
       0.00035 *
       deltaTime;
 
   } else if (tilt < 84) {
-
-    // Slowly recover when the phone
-    // is brought back down.
 
     distortionLevel -=
       0.00045 *
@@ -220,7 +218,7 @@ function draw() {
 
 
   // --------------------------------
-  // TEXT
+  // ORIGINAL TEXT
   // --------------------------------
 
   textAlign(
@@ -230,19 +228,19 @@ function draw() {
 
   textFont("Georgia");
 
-  fill(
-    255,
-    255,
-    255,
-    230
-  );
-
-  textSize(
-    min(width, height) * 0.045
-  );
-
 
   if (!bubblePopped) {
+
+    fill(
+      255,
+      255,
+      255,
+      230
+    );
+
+    textSize(
+      min(width, height) * 0.045
+    );
 
     text(
       "reveal what's hidden",
@@ -250,20 +248,21 @@ function draw() {
       height * 0.10
     );
 
-  } else {
+  } else if (!contributionActivated) {
 
-    // Fade the original text out slightly
-    // as the contribution UI appears.
-
-    let textAlpha =
-      230 -
-      contributionFade * 100;
+    // --------------------------------
+    // BUBBLE GONE SCREEN
+    // --------------------------------
 
     fill(
       255,
       255,
       255,
-      textAlpha
+      230
+    );
+
+    textSize(
+      min(width, height) * 0.045
     );
 
     text(
@@ -271,17 +270,38 @@ function draw() {
       width / 2,
       height * 0.10
     );
+
+
+    // Small instruction underneath.
+
+    fill(
+      255,
+      255,
+      255,
+      110
+    );
+
+    textSize(
+      min(width, height) * 0.022
+    );
+
+    text(
+      "tap to continue",
+      width / 2,
+      height * 0.16
+    );
   }
 
 
   // --------------------------------
-  // CONTRIBUTION UI
+  // CONTRIBUTION SCREEN
   // --------------------------------
 
-  if (bubblePopped) {
-
-    // Start the fade only once the bubble
-    // has completely disappeared.
+  if (
+    bubblePopped &&
+    contributionActivated &&
+    !contributionSubmitted
+  ) {
 
     if (contributionStartTime === 0) {
 
@@ -290,17 +310,15 @@ function draw() {
     }
 
 
-    let fadeProgress =
-      (
-        millis() -
-        contributionStartTime
-      ) /
-      contributionFadeDuration;
+    let elapsed =
+      millis() -
+      contributionStartTime;
 
 
     contributionFade =
       constrain(
-        fadeProgress,
+        elapsed /
+        contributionFadeDuration,
         0,
         1
       );
@@ -308,6 +326,41 @@ function draw() {
 
     drawContributionUI(
       contributionFade
+    );
+  }
+
+
+  // --------------------------------
+  // SUBMISSION CONFIRMATION
+  // --------------------------------
+
+  if (
+    contributionSubmitted
+  ) {
+
+    if (submissionStartTime === 0) {
+
+      submissionStartTime =
+        millis();
+    }
+
+
+    let elapsed =
+      millis() -
+      submissionStartTime;
+
+
+    submissionFade =
+      constrain(
+        elapsed /
+        submissionFadeDuration,
+        0,
+        1
+      );
+
+
+    drawSubmissionScreen(
+      submissionFade
     );
   }
 
@@ -723,11 +776,6 @@ function drawMinionInsideBubble(
 
   push();
 
-
-  // --------------------------------
-  // CIRCLE MASK
-  // --------------------------------
-
   drawingContext.save();
 
   drawingContext.beginPath();
@@ -746,10 +794,6 @@ function drawMinionInsideBubble(
   let imageSize =
     size * 0.98;
 
-
-  // --------------------------------
-  // VERY SLOW DISTORTION
-  // --------------------------------
 
   let intensity =
     distortionLevel;
@@ -904,17 +948,11 @@ function drawMinionInsideBubble(
           : -1;
 
 
-      // Very small at first,
-      // enormous at maximum.
-
       let shift =
         direction *
         intensity *
         120;
 
-
-      // Random movement becomes stronger
-      // later in the distortion.
 
       if (intensity > 0.35) {
 
@@ -1234,7 +1272,6 @@ function drawMinionInsideBubble(
   drawingContext.filter =
     "none";
 
-
   drawingContext.restore();
 
   pop();
@@ -1281,7 +1318,7 @@ function drawContributionUI(
 
 
   // --------------------------------
-  // CONTRIBUTION MESSAGE
+  // TITLE
   // --------------------------------
 
   textAlign(
@@ -1296,38 +1333,19 @@ function drawContributionUI(
   );
 
 
-  if (!contributionSubmitted) {
-
-    fill(
-      255,
-      255,
-      255,
-      210 * fade
-    );
+  fill(
+    255,
+    255,
+    255,
+    220 * fade
+  );
 
 
-    text(
-      "leave something behind",
-      centreX,
-      height * 0.18
-    );
-
-  } else {
-
-    fill(
-      255,
-      255,
-      255,
-      230 * fade
-    );
-
-
-    text(
-      "your contribution has been added",
-      centreX,
-      height * 0.18
-    );
-  }
+  text(
+    "leave something behind",
+    centreX,
+    height * 0.10
+  );
 
 
   // --------------------------------
@@ -1392,8 +1410,6 @@ function drawContributionUI(
         drawingPoints[i];
 
 
-      // Break between separate strokes.
-
       if (
         current.newStroke ||
         previous.newStroke
@@ -1417,8 +1433,7 @@ function drawContributionUI(
   // --------------------------------
 
   if (
-    drawingPoints.length === 0 &&
-    !contributionSubmitted
+    drawingPoints.length === 0
   ) {
 
     noStroke();
@@ -1448,69 +1463,138 @@ function drawContributionUI(
   // SUBMIT BUTTON
   // --------------------------------
 
-  if (!contributionSubmitted) {
-
-    let buttonWidth =
-      min(
-        width * 0.55,
-        250
-      );
-
-
-    let buttonHeight =
-      48;
-
-
-    let buttonX =
-      centreX -
-      buttonWidth / 2;
-
-
-    let buttonY =
-      drawingY +
-      drawingHeight +
-      28;
-
-
-    noStroke();
-
-    fill(
-      255,
-      255,
-      255,
-      220 * fade
+  let buttonWidth =
+    min(
+      width * 0.55,
+      250
     );
 
 
-    rect(
-      buttonX,
-      buttonY,
-      buttonWidth,
-      buttonHeight,
-      24
-    );
+  let buttonHeight =
+    48;
 
 
-    fill(
-      0,
-      0,
-      0,
-      230 * fade
-    );
+  let buttonX =
+    centreX -
+    buttonWidth / 2;
 
 
-    textSize(
-      min(width, height) * 0.021
-    );
+  let buttonY =
+    drawingY +
+    drawingHeight +
+    28;
 
 
-    text(
-      "SUBMIT CONTRIBUTION",
-      centreX,
-      buttonY +
-      buttonHeight / 2
-    );
-  }
+  noStroke();
+
+  fill(
+    255,
+    255,
+    255,
+    220 * fade
+  );
+
+
+  rect(
+    buttonX,
+    buttonY,
+    buttonWidth,
+    buttonHeight,
+    24
+  );
+
+
+  fill(
+    0,
+    0,
+    0,
+    230 * fade
+  );
+
+
+  textSize(
+    min(width, height) * 0.021
+  );
+
+
+  text(
+    "SUBMIT CONTRIBUTION",
+    centreX,
+    buttonY +
+    buttonHeight / 2
+  );
+}
+
+
+// ================================================
+// SUBMISSION SCREEN
+// ================================================
+
+function drawSubmissionScreen(
+  fade
+) {
+
+  let centreX =
+    width / 2;
+
+
+  let centreY =
+    height / 2;
+
+
+  // --------------------------------
+  // TITLE
+  // --------------------------------
+
+  textAlign(
+    CENTER,
+    CENTER
+  );
+
+  textFont("Georgia");
+
+  textSize(
+    min(width, height) * 0.045
+  );
+
+
+  fill(
+    255,
+    255,
+    255,
+    230 * fade
+  );
+
+
+  text(
+    "your contribution has been added",
+    centreX,
+    centreY - height * 0.04
+  );
+
+
+  // --------------------------------
+  // SMALL FOLLOW-UP
+  // --------------------------------
+
+  textSize(
+    min(width, height) * 0.023
+  );
+
+
+  fill(
+    255,
+    255,
+    255,
+    110 * fade
+  );
+
+
+  text(
+    "thank you for leaving something behind",
+    centreX,
+    centreY + height * 0.035
+  );
 }
 
 
@@ -1518,69 +1602,38 @@ function drawContributionUI(
 // DRAWING INPUT
 // ================================================
 
-function mouseDragged() {
-
-  if (
-    !bubblePopped ||
-    contributionSubmitted ||
-    contributionFade < 0.7
-  ) {
-    return;
-  }
-
-
-  let drawingWidth =
-    min(
-      width * 0.78,
-      430
-    );
-
-
-  let drawingHeight =
-    min(
-      height * 0.34,
-      260
-    );
-
-
-  let drawingX =
-    width / 2 -
-    drawingWidth / 2;
-
-
-  let drawingY =
-    height * 0.24;
-
-
-  // Only draw inside the drawing box.
-
-  if (
-    mouseX >= drawingX &&
-    mouseX <= drawingX + drawingWidth &&
-    mouseY >= drawingY &&
-    mouseY <= drawingY + drawingHeight
-  ) {
-
-    drawingPoints.push({
-      x: mouseX,
-      y: mouseY,
-      newStroke: false
-    });
-  }
-
-
-  return false;
-}
-
-
-// --------------------------------
-// START NEW DRAWING STROKE
-// --------------------------------
-
 function mousePressed() {
 
+  // --------------------------------
+  // TAP AFTER BUBBLE POP
+  // --------------------------------
+
+  if (
+    bubblePopped &&
+    !contributionActivated &&
+    !contributionSubmitted
+  ) {
+
+    contributionActivated = true;
+
+    contributionStartTime =
+      millis();
+
+    console.log(
+      "CONTRIBUTION SCREEN ACTIVATED"
+    );
+
+    return false;
+  }
+
+
+  // --------------------------------
+  // DRAWING SCREEN
+  // --------------------------------
+
   if (
     !bubblePopped ||
+    !contributionActivated ||
     contributionSubmitted ||
     contributionFade < 0.7
   ) {
@@ -1671,6 +1724,9 @@ function mousePressed() {
 
       contributionSubmitted = true;
 
+      submissionStartTime =
+        millis();
+
       console.log(
         "CONTRIBUTION ADDED"
       );
@@ -1678,6 +1734,64 @@ function mousePressed() {
 
     return false;
   }
+}
+
+
+// --------------------------------
+// CONTINUE DRAWING
+// --------------------------------
+
+function mouseDragged() {
+
+  if (
+    !bubblePopped ||
+    !contributionActivated ||
+    contributionSubmitted ||
+    contributionFade < 0.7
+  ) {
+    return;
+  }
+
+
+  let drawingWidth =
+    min(
+      width * 0.78,
+      430
+    );
+
+
+  let drawingHeight =
+    min(
+      height * 0.34,
+      260
+    );
+
+
+  let drawingX =
+    width / 2 -
+    drawingWidth / 2;
+
+
+  let drawingY =
+    height * 0.24;
+
+
+  if (
+    mouseX >= drawingX &&
+    mouseX <= drawingX + drawingWidth &&
+    mouseY >= drawingY &&
+    mouseY <= drawingY + drawingHeight
+  ) {
+
+    drawingPoints.push({
+      x: mouseX,
+      y: mouseY,
+      newStroke: false
+    });
+  }
+
+
+  return false;
 }
 
 
