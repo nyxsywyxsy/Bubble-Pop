@@ -19,9 +19,6 @@ let droplets = [];
 // DISTORTION MEMORY
 // --------------------------------
 
-// This is separate from the phone angle.
-// It allows the distortion to build over time.
-
 let distortionLevel = 0;
 
 let lastFrameTime = 0;
@@ -126,38 +123,31 @@ function draw() {
   // TIME-BASED DISTORTION
   // --------------------------------
 
-  // Distortion only begins once the phone
-  // is tilted far enough.
+  // NOTHING happens until the phone
+  // is completely upright.
 
   if (
-    tilt > 40 &&
+    tilt >= 88 &&
     !bubblePopped &&
     !popStarted
   ) {
 
-    // The higher the tilt, the faster
-    // the distortion builds.
-
-    let buildSpeed = map(
-      tilt,
-      40,
-      90,
-      0.002,
-      0.012
-    );
+    // Very slow initial buildup.
+    //
+    // Even when upright, the effect
+    // takes a long time to become obvious.
 
     distortionLevel +=
-      buildSpeed *
+      0.00035 *
       deltaTime;
 
-  } else {
+  } else if (tilt < 84) {
 
-    // If the phone comes back down,
-    // slowly recover instead of instantly
-    // resetting the distortion.
+    // Slowly recover when the phone
+    // is brought back down.
 
     distortionLevel -=
-      0.0015 *
+      0.00045 *
       deltaTime;
   }
 
@@ -657,7 +647,7 @@ function drawBubble(
 
 
 // ================================================
-// MINION + TIME-BASED DISTORTION
+// MINION + SLOW DISTORTION
 // ================================================
 
 function drawMinionInsideBubble(
@@ -695,7 +685,7 @@ function drawMinionInsideBubble(
 
 
   // --------------------------------
-  // DISTORTION INTENSITY
+  // VERY SLOW DISTORTION
   // --------------------------------
 
   let intensity =
@@ -706,7 +696,7 @@ function drawMinionInsideBubble(
   // NORMAL IMAGE
   // --------------------------------
 
-  if (intensity < 0.08) {
+  if (intensity < 0.02) {
 
     tint(
       255,
@@ -727,17 +717,27 @@ function drawMinionInsideBubble(
 
 
     // ========================================
-    // DEEP BLACK IMAGE
+    // DEEPENING BLACKS
     // ========================================
 
+    let blackStrength =
+      100 -
+      intensity * 45;
+
+
     drawingContext.filter =
-      "contrast(180%) brightness(60%)";
+      "contrast(" +
+      (
+        100 +
+        intensity * 180
+      ) +
+      "%) brightness(" +
+      blackStrength +
+      "%)";
 
 
     tint(
-      30,
-      30,
-      30,
+      255,
       opacity
     );
 
@@ -751,68 +751,70 @@ function drawMinionInsideBubble(
     );
 
 
-    // ========================================
-    // RGB GHOSTING
-    // ========================================
-
     drawingContext.filter =
       "none";
 
 
+    // ========================================
+    // SUBTLE RGB SEPARATION
+    // ========================================
+
     let rgbShift =
-      5 +
-      intensity * 50;
+      intensity * 55;
 
 
-    // Red ghost
+    if (intensity > 0.08) {
 
-    tint(
-      255,
-      255,
-      255,
-      opacity * 0.40
-    );
-
-
-    image(
-      minion,
-      x - rgbShift,
-      y,
-      imageSize,
-      imageSize
-    );
+      tint(
+        255,
+        255,
+        255,
+        opacity *
+        intensity *
+        0.45
+      );
 
 
-    // Blue ghost
-
-    tint(
-      255,
-      255,
-      255,
-      opacity * 0.25
-    );
-
-
-    image(
-      minion,
-      x + rgbShift,
-      y,
-      imageSize,
-      imageSize
-    );
+      image(
+        minion,
+        x - rgbShift,
+        y,
+        imageSize,
+        imageSize
+      );
 
 
-    noTint();
+      tint(
+        255,
+        255,
+        255,
+        opacity *
+        intensity *
+        0.30
+      );
+
+
+      image(
+        minion,
+        x + rgbShift,
+        y,
+        imageSize,
+        imageSize
+      );
+
+
+      noTint();
+    }
 
 
     // ========================================
-    // HORIZONTAL CORRUPTION
+    // HORIZONTAL SLICING
     // ========================================
 
     let sliceCount =
-      8 +
+      5 +
       floor(
-        intensity * 12
+        intensity * 15
       );
 
 
@@ -839,22 +841,27 @@ function drawMinionInsideBubble(
           : -1;
 
 
+      // Very small at first,
+      // enormous at maximum.
+
       let shift =
         direction *
         intensity *
         120;
 
 
-      // Add random movement once
-      // distortion is strong.
+      // Random movement becomes stronger
+      // later in the distortion.
 
-      if (intensity > 0.45) {
+      if (intensity > 0.35) {
 
         shift +=
           random(
-            -40,
-            40
-          );
+            -1,
+            1
+          ) *
+          intensity *
+          50;
       }
 
 
@@ -875,13 +882,8 @@ function drawMinionInsideBubble(
       drawingContext.filter =
         "contrast(" +
         (
-          120 +
+          100 +
           intensity * 180
-        ) +
-        "%) brightness(" +
-        (
-          100 -
-          intensity * 45
         ) +
         "%)";
 
@@ -916,18 +918,17 @@ function drawMinionInsideBubble(
 
 
     let pixelSize =
-      3 +
-      intensity * 25;
-
-
-    noStroke();
+      2 +
+      intensity * 28;
 
 
     let pixelCount =
       floor(
-        20 +
-        intensity * 100
+        intensity * 110
       );
+
+
+    noStroke();
 
 
     for (
@@ -955,14 +956,12 @@ function drawMinionInsideBubble(
         );
 
 
-      // Black corruption
-
       fill(
         0,
         0,
         0,
         random(
-          80,
+          70,
           230
         )
       );
@@ -978,7 +977,7 @@ function drawMinionInsideBubble(
 
 
     // ========================================
-    // MISSING SECTIONS
+    // MISSING BLACK SECTIONS
     // ========================================
 
     let missingCount =
@@ -1024,8 +1023,8 @@ function drawMinionInsideBubble(
         0,
         0,
         random(
-          120,
-          250
+          100,
+          240
         )
       );
 
@@ -1040,20 +1039,27 @@ function drawMinionInsideBubble(
 
 
     // ========================================
-    // HEAVY GHOSTING
+    // GHOSTING
     // ========================================
 
-    if (intensity > 0.35) {
+    if (intensity > 0.25) {
 
       drawingContext.filter =
-        "contrast(250%)";
+        "contrast(" +
+        (
+          100 +
+          intensity * 200
+        ) +
+        "%)";
 
 
       tint(
         255,
         255,
         255,
-        opacity * 0.20
+        opacity *
+        intensity *
+        0.35
       );
 
 
@@ -1062,7 +1068,7 @@ function drawMinionInsideBubble(
         x -
         intensity * 100,
         y +
-        random(-10, 10),
+        random(-8, 8),
         imageSize,
         imageSize
       );
@@ -1072,7 +1078,9 @@ function drawMinionInsideBubble(
         255,
         255,
         255,
-        opacity * 0.20
+        opacity *
+        intensity *
+        0.30
       );
 
 
@@ -1081,7 +1089,7 @@ function drawMinionInsideBubble(
         x +
         intensity * 100,
         y +
-        random(-10, 10),
+        random(-8, 8),
         imageSize,
         imageSize
       );
@@ -1142,8 +1150,8 @@ function drawMinionInsideBubble(
         0,
         0,
         random(
-          100,
-          240
+          80,
+          220
         )
       );
 
