@@ -1,6 +1,10 @@
 let minion = null;
 let imageReady = false;
 
+let bubblePopped = false;
+
+let lastShake = 0;
+
 
 // --------------------------------
 // SETUP
@@ -14,6 +18,9 @@ async function setup() {
 
   // Ask for motion sensor permission
   enableGyroTap('Tap to enable motion sensors');
+
+  // Shake sensitivity
+  setShakeThreshold(30);
 
   angleMode(DEGREES);
 
@@ -48,33 +55,40 @@ function draw() {
 
 
   // --------------------------------
-  // BUBBLE DARK CENTRE
-  // --------------------------------
-
-  noStroke();
-
-  fill(2, 15, 18, 210);
-
-  ellipse(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.88
-  );
-
-
-  // --------------------------------
   // MINION
   // --------------------------------
 
-  if (window.sensorsEnabled && imageReady && minion) {
+  if (imageReady && minion) {
 
-    let tilt = abs(rotationX);
+    // Before the bubble pops, the Minion is only
+    // revealed when the phone is tilted.
 
-    // Keep tilt between 0 and 90 degrees
-    tilt = constrain(tilt, 0, 90);
+    if (!bubblePopped && window.sensorsEnabled) {
 
-    // Reveal when phone is tilted more than 15 degrees
-    if (tilt > 15) {
+      let tilt = abs(rotationX);
+
+      tilt = constrain(tilt, 0, 90);
+
+      if (tilt > 15) {
+
+        tint(255, 255);
+
+        image(
+          minion,
+          bubbleX,
+          bubbleY,
+          bubbleSize * 0.42,
+          bubbleSize * 0.42
+        );
+
+        noTint();
+      }
+    }
+
+
+    // After the bubble pops, the Minion stays visible.
+
+    if (bubblePopped) {
 
       tint(255, 255);
 
@@ -82,8 +96,8 @@ function draw() {
         minion,
         bubbleX,
         bubbleY,
-        bubbleSize * 0.42,
-        bubbleSize * 0.42
+        bubbleSize * 0.55,
+        bubbleSize * 0.55
       );
 
       noTint();
@@ -92,260 +106,310 @@ function draw() {
 
 
   // --------------------------------
-  // VERY SUBTLE TEAL INSIDE BUBBLE
+  // BUBBLE
   // --------------------------------
 
-  fill(0, 70, 75, 35);
+  // Only draw the bubble while it is intact.
 
-  ellipse(
-    bubbleX - bubbleSize * 0.04,
-    bubbleY - bubbleSize * 0.03,
-    bubbleSize * 0.80
-  );
+  if (!bubblePopped) {
 
+    // --------------------------------
+    // BUBBLE DARK CENTRE
+    // --------------------------------
 
-  // --------------------------------
-  // IRIDESCENT BUBBLE FILM
-  // --------------------------------
+    noStroke();
 
-  // Cyan
+    fill(2, 15, 18, 210);
 
-  fill(20, 220, 240, 45);
+    ellipse(
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.88
+    );
 
-  ellipse(
-    bubbleX - bubbleSize * 0.28,
-    bubbleY - bubbleSize * 0.12,
-    bubbleSize * 0.38,
-    bubbleSize * 0.65
-  );
 
+    // --------------------------------
+    // VERY SUBTLE TEAL INSIDE
+    // --------------------------------
 
-  // Purple
+    fill(0, 70, 75, 35);
 
-  fill(170, 70, 255, 45);
+    ellipse(
+      bubbleX - bubbleSize * 0.04,
+      bubbleY - bubbleSize * 0.03,
+      bubbleSize * 0.80
+    );
 
-  ellipse(
-    bubbleX - bubbleSize * 0.10,
-    bubbleY - bubbleSize * 0.35,
-    bubbleSize * 0.45,
-    bubbleSize * 0.35
-  );
 
+    // --------------------------------
+    // IRIDESCENT BUBBLE FILM
+    // --------------------------------
 
-  // Pink
+    // Cyan
 
-  fill(255, 70, 180, 50);
+    fill(20, 220, 240, 45);
 
-  ellipse(
-    bubbleX + bubbleSize * 0.20,
-    bubbleY - bubbleSize * 0.30,
-    bubbleSize * 0.48,
-    bubbleSize * 0.35
-  );
+    ellipse(
+      bubbleX - bubbleSize * 0.28,
+      bubbleY - bubbleSize * 0.12,
+      bubbleSize * 0.38,
+      bubbleSize * 0.65
+    );
 
 
-  // Blue
+    // Purple
 
-  fill(70, 150, 255, 45);
+    fill(170, 70, 255, 45);
 
-  ellipse(
-    bubbleX + bubbleSize * 0.34,
-    bubbleY,
-    bubbleSize * 0.28,
-    bubbleSize * 0.55
-  );
+    ellipse(
+      bubbleX - bubbleSize * 0.10,
+      bubbleY - bubbleSize * 0.35,
+      bubbleSize * 0.45,
+      bubbleSize * 0.35
+    );
 
 
-  // Green
+    // Pink
 
-  fill(80, 255, 190, 42);
+    fill(255, 70, 180, 50);
 
-  ellipse(
-    bubbleX + bubbleSize * 0.18,
-    bubbleY + bubbleSize * 0.28,
-    bubbleSize * 0.45,
-    bubbleSize * 0.30
-  );
+    ellipse(
+      bubbleX + bubbleSize * 0.20,
+      bubbleY - bubbleSize * 0.30,
+      bubbleSize * 0.48,
+      bubbleSize * 0.35
+    );
 
 
-  // Yellow
+    // Blue
 
-  fill(255, 230, 100, 35);
+    fill(70, 150, 255, 45);
 
-  ellipse(
-    bubbleX - bubbleSize * 0.20,
-    bubbleY + bubbleSize * 0.30,
-    bubbleSize * 0.45,
-    bubbleSize * 0.25
-  );
+    ellipse(
+      bubbleX + bubbleSize * 0.34,
+      bubbleY,
+      bubbleSize * 0.28,
+      bubbleSize * 0.55
+    );
 
 
-  // --------------------------------
-  // IRIDESCENT EDGE
-  // --------------------------------
+    // Green
 
-  noFill();
+    fill(80, 255, 190, 42);
 
-  // Soft outer glow
+    ellipse(
+      bubbleX + bubbleSize * 0.18,
+      bubbleY + bubbleSize * 0.28,
+      bubbleSize * 0.45,
+      bubbleSize * 0.30
+    );
 
-  strokeWeight(12);
-  stroke(100, 220, 255, 25);
 
-  ellipse(
-    bubbleX,
-    bubbleY,
-    bubbleSize,
-    bubbleSize
-  );
+    // Yellow
 
+    fill(255, 230, 100, 35);
 
-  // Main thin rainbow edge
+    ellipse(
+      bubbleX - bubbleSize * 0.20,
+      bubbleY + bubbleSize * 0.30,
+      bubbleSize * 0.45,
+      bubbleSize * 0.25
+    );
 
-  strokeWeight(5);
 
+    // --------------------------------
+    // IRIDESCENT EDGE
+    // --------------------------------
 
-  // Pink
+    noFill();
 
-  stroke(255, 100, 190, 170);
+    // Soft outer glow
 
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 1.05,
-    PI * 1.48
-  );
+    strokeWeight(12);
+    stroke(100, 220, 255, 25);
 
+    ellipse(
+      bubbleX,
+      bubbleY,
+      bubbleSize,
+      bubbleSize
+    );
 
-  // Purple
 
-  stroke(170, 100, 255, 170);
+    // Main thin rainbow edge
 
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 1.48,
-    PI * 1.75
-  );
+    strokeWeight(5);
 
 
-  // Blue
+    // Pink
 
-  stroke(80, 190, 255, 180);
+    stroke(255, 100, 190, 170);
 
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 1.75,
-    PI * 2.05
-  );
+    arc(
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.98,
+      bubbleSize * 0.98,
+      PI * 1.05,
+      PI * 1.48
+    );
 
 
-  // Cyan
+    // Purple
 
-  stroke(80, 240, 230, 180);
+    stroke(170, 100, 255, 170);
 
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 2.05,
-    PI * 2.35
-  );
+    arc(
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.98,
+      bubbleSize * 0.98,
+      PI * 1.48,
+      PI * 1.75
+    );
 
 
-  // Green
+    // Blue
 
-  stroke(150, 255, 180, 150);
+    stroke(80, 190, 255, 180);
 
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 2.35,
-    PI * 2.60
-  );
+    arc(
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.98,
+      bubbleSize * 0.98,
+      PI * 1.75,
+      PI * 2.05
+    );
 
 
-  // Yellow
+    // Cyan
 
-  stroke(255, 230, 120, 150);
+    stroke(80, 240, 230, 180);
 
-  arc(
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.98,
-    bubbleSize * 0.98,
-    PI * 2.60,
-    PI * 2.90
-  );
+    arc(
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.98,
+      bubbleSize * 0.98,
+      PI * 2.05,
+      PI * 2.35
+    );
 
 
-  // --------------------------------
-  // CURVED REFLECTIONS
-  // --------------------------------
+    // Green
 
-  stroke(255, 255, 255, 150);
-  strokeWeight(4);
+    stroke(150, 255, 180, 150);
 
-  arc(
-    bubbleX - bubbleSize * 0.14,
-    bubbleY - bubbleSize * 0.13,
-    bubbleSize * 0.65,
-    bubbleSize * 0.65,
-    PI * 1.05,
-    PI * 1.45
-  );
+    arc(
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.98,
+      bubbleSize * 0.98,
+      PI * 2.35,
+      PI * 2.60
+    );
 
 
-  stroke(255, 255, 255, 100);
-  strokeWeight(2);
+    // Yellow
 
-  arc(
-    bubbleX + bubbleSize * 0.13,
-    bubbleY + bubbleSize * 0.12,
-    bubbleSize * 0.70,
-    bubbleSize * 0.70,
-    0,
-    HALF_PI
-  );
+    stroke(255, 230, 120, 150);
 
+    arc(
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.98,
+      bubbleSize * 0.98,
+      PI * 2.60,
+      PI * 2.90
+    );
 
-  // --------------------------------
-  // BRIGHT REFLECTION SPOTS
-  // --------------------------------
 
-  noStroke();
+    // --------------------------------
+    // CURVED REFLECTIONS
+    // --------------------------------
 
-  fill(255, 255, 255, 180);
+    stroke(255, 255, 255, 150);
+    strokeWeight(4);
 
-  ellipse(
-    bubbleX - bubbleSize * 0.25,
-    bubbleY - bubbleSize * 0.25,
-    bubbleSize * 0.045
-  );
+    arc(
+      bubbleX - bubbleSize * 0.14,
+      bubbleY - bubbleSize * 0.13,
+      bubbleSize * 0.65,
+      bubbleSize * 0.65,
+      PI * 1.05,
+      PI * 1.45
+    );
 
-  ellipse(
-    bubbleX + bubbleSize * 0.27,
-    bubbleY - bubbleSize * 0.17,
-    bubbleSize * 0.035
-  );
 
+    stroke(255, 255, 255, 100);
+    strokeWeight(2);
 
-  fill(255, 255, 255, 100);
+    arc(
+      bubbleX + bubbleSize * 0.13,
+      bubbleY + bubbleSize * 0.12,
+      bubbleSize * 0.70,
+      bubbleSize * 0.70,
+      0,
+      HALF_PI
+    );
 
-  ellipse(
-    bubbleX - bubbleSize * 0.32,
-    bubbleY - bubbleSize * 0.03,
-    bubbleSize * 0.025
-  );
+
+    // --------------------------------
+    // BRIGHT REFLECTION SPOTS
+    // --------------------------------
+
+    noStroke();
+
+    fill(255, 255, 255, 180);
+
+    ellipse(
+      bubbleX - bubbleSize * 0.25,
+      bubbleY - bubbleSize * 0.25,
+      bubbleSize * 0.045
+    );
+
+    ellipse(
+      bubbleX + bubbleSize * 0.27,
+      bubbleY - bubbleSize * 0.17,
+      bubbleSize * 0.035
+    );
+
+
+    fill(255, 255, 255, 100);
+
+    ellipse(
+      bubbleX - bubbleSize * 0.32,
+      bubbleY - bubbleSize * 0.03,
+      bubbleSize * 0.025
+    );
+
+
+    // --------------------------------
+    // SPARKLES
+    // --------------------------------
+
+    stroke(255, 255, 255, 170);
+    strokeWeight(1.5);
+
+    drawSparkle(
+      bubbleX - bubbleSize * 0.39,
+      bubbleY - bubbleSize * 0.10,
+      bubbleSize * 0.025
+    );
+
+    drawSparkle(
+      bubbleX + bubbleSize * 0.39,
+      bubbleY - bubbleSize * 0.25,
+      bubbleSize * 0.02
+    );
+
+    drawSparkle(
+      bubbleX + bubbleSize * 0.28,
+      bubbleY + bubbleSize * 0.43,
+      bubbleSize * 0.018
+    );
+  }
 
 
   // --------------------------------
@@ -360,37 +424,42 @@ function draw() {
 
   textSize(min(width, height) * 0.045);
 
-  text(
-    "reveal what's hidden",
-    width / 2,
-    height * 0.10
-  );
+  if (!bubblePopped) {
+
+    text(
+      "reveal what's hidden",
+      width / 2,
+      height * 0.10
+    );
+
+  } else {
+
+    text(
+      "you found what's hidden",
+      width / 2,
+      height * 0.10
+    );
+  }
+}
 
 
-  // --------------------------------
-  // SMALL SPARKLES
-  // --------------------------------
+// --------------------------------
+// SHAKE
+// --------------------------------
 
-  stroke(255, 255, 255, 170);
-  strokeWeight(1.5);
+function deviceShaken() {
 
-  drawSparkle(
-    bubbleX - bubbleSize * 0.39,
-    bubbleY - bubbleSize * 0.10,
-    bubbleSize * 0.025
-  );
+  // Prevent one shake from triggering
+  // many times in a row.
 
-  drawSparkle(
-    bubbleX + bubbleSize * 0.39,
-    bubbleY - bubbleSize * 0.25,
-    bubbleSize * 0.02
-  );
+  if (millis() - lastShake > 700) {
 
-  drawSparkle(
-    bubbleX + bubbleSize * 0.28,
-    bubbleY + bubbleSize * 0.43,
-    bubbleSize * 0.018
-  );
+    bubblePopped = true;
+
+    lastShake = millis();
+
+    console.log("BUBBLE POPPED");
+  }
 }
 
 
