@@ -1,20 +1,18 @@
 let minion;
+let imageLoaded = false;
+let imageFailed = false;
 
 function preload() {
 
   minion = loadImage(
     "minion.jpg",
 
-    // SUCCESS
-    function(img) {
-      console.log("MINION LOADED!");
-      console.log(img.width, img.height);
+    function() {
+      imageLoaded = true;
     },
 
-    // ERROR
-    function(error) {
-      console.log("MINION FAILED TO LOAD!");
-      console.log(error);
+    function() {
+      imageFailed = true;
     }
   );
 }
@@ -23,11 +21,11 @@ function setup() {
 
   createCanvas(windowWidth, windowHeight);
 
-  background(0);
-
   imageMode(CENTER);
 
-  if (minion) {
+  background(0);
+
+  if (imageLoaded) {
 
     image(
       minion,
@@ -37,16 +35,26 @@ function setup() {
       300
     );
 
-    fill(255);
+    fill(0, 255, 0);
     textAlign(CENTER);
     textSize(24);
-    text("IMAGE LOADED", width / 2, height - 80);
+
+    text(
+      "MINION LOADED",
+      width / 2,
+      height - 80
+    );
 
   } else {
 
     fill(255, 0, 0);
     textAlign(CENTER);
     textSize(24);
-    text("IMAGE DID NOT LOAD", width / 2, height / 2);
+
+    text(
+      "MINION DID NOT LOAD",
+      width / 2,
+      height / 2
+    );
   }
 }
