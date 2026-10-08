@@ -32,7 +32,6 @@ function draw() {
 
   noStroke();
 
-  // Dark transparent centre
   fill(2, 15, 18, 210);
 
   ellipse(
@@ -41,7 +40,6 @@ function draw() {
     bubbleSize * 0.88
   );
 
-  // Very subtle teal inside the bubble
   fill(0, 70, 75, 35);
 
   ellipse(
@@ -56,7 +54,6 @@ function draw() {
 
   noStroke();
 
-  // Cyan
   fill(20, 220, 240, 45);
 
   ellipse(
@@ -66,7 +63,6 @@ function draw() {
     bubbleSize * 0.65
   );
 
-  // Purple
   fill(170, 70, 255, 45);
 
   ellipse(
@@ -76,7 +72,6 @@ function draw() {
     bubbleSize * 0.35
   );
 
-  // Pink
   fill(255, 70, 180, 50);
 
   ellipse(
@@ -86,7 +81,6 @@ function draw() {
     bubbleSize * 0.35
   );
 
-  // Blue
   fill(70, 150, 255, 45);
 
   ellipse(
@@ -96,7 +90,6 @@ function draw() {
     bubbleSize * 0.55
   );
 
-  // Green
   fill(80, 255, 190, 42);
 
   ellipse(
@@ -106,7 +99,6 @@ function draw() {
     bubbleSize * 0.30
   );
 
-  // Yellow
   fill(255, 230, 100, 35);
 
   ellipse(
@@ -122,7 +114,6 @@ function draw() {
 
   noFill();
 
-  // Soft outer glow
   strokeWeight(12);
   stroke(100, 220, 255, 25);
 
@@ -133,11 +124,8 @@ function draw() {
     bubbleSize
   );
 
-  // Main thin rainbow edge
-
   strokeWeight(5);
 
-  // Pink
   stroke(255, 100, 190, 170);
 
   arc(
@@ -149,7 +137,6 @@ function draw() {
     PI * 1.48
   );
 
-  // Purple
   stroke(170, 100, 255, 170);
 
   arc(
@@ -161,7 +148,6 @@ function draw() {
     PI * 1.75
   );
 
-  // Blue
   stroke(80, 190, 255, 180);
 
   arc(
@@ -173,7 +159,6 @@ function draw() {
     PI * 2.05
   );
 
-  // Cyan
   stroke(80, 240, 230, 180);
 
   arc(
@@ -185,7 +170,6 @@ function draw() {
     PI * 2.35
   );
 
-  // Green
   stroke(150, 255, 180, 150);
 
   arc(
@@ -197,7 +181,6 @@ function draw() {
     PI * 2.60
   );
 
-  // Yellow
   stroke(255, 230, 120, 150);
 
   arc(
@@ -216,7 +199,6 @@ function draw() {
   stroke(255, 255, 255, 150);
   strokeWeight(4);
 
-  // Large curved white reflection
   arc(
     bubbleX - bubbleSize * 0.14,
     bubbleY - bubbleSize * 0.13,
@@ -269,38 +251,34 @@ function draw() {
   // HIDDEN MINION
   // --------------------------------
 
-  // Map phone tilt to Minion opacity.
-  // Small tilt = slightly visible.
-  // Larger tilt = increasingly visible.
-
   let minionOpacity = map(
-    abs(tiltAmount),
+    tiltAmount,
     0,
     45,
-    25,
+    20,
     180,
     true
   );
 
-  tint(255, minionOpacity);
+  if (minion) {
+    tint(255, minionOpacity);
 
-  image(
-    minion,
-    bubbleX,
-    bubbleY,
-    bubbleSize * 0.42,
-    bubbleSize * 0.42
-  );
+    image(
+      minion,
+      bubbleX,
+      bubbleY,
+      bubbleSize * 0.42,
+      bubbleSize * 0.42
+    );
 
-  noTint();
+    noTint();
+  }
 
   // --------------------------------
   // TEXT
   // --------------------------------
 
   textAlign(CENTER, CENTER);
-
-  // Elegant serif-style font
   textFont("Georgia");
 
   fill(255, 255, 255, 230);
@@ -340,15 +318,14 @@ function draw() {
 }
 
 // --------------------------------
-// DEVICE ORIENTATION
+// PHONE TILT
 // --------------------------------
 
-function deviceOrientation(alpha, beta, gamma) {
-  // beta = front/back tilt
-  // gamma = left/right tilt
+function deviceMoved() {
+  let xTilt = abs(rotationX);
+  let yTilt = abs(rotationY);
 
-  // Use whichever direction has the stronger tilt.
-  tiltAmount = max(abs(beta), abs(gamma));
+  tiltAmount = max(xTilt, yTilt);
 }
 
 // --------------------------------
