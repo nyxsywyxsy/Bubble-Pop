@@ -45,6 +45,16 @@ let drawingPoints = [];
 
 
 // --------------------------------
+// DRAWING WAVE
+// --------------------------------
+
+let waveStartTime = 0;
+let waveDuration = 5000;
+
+let waveCopies = [];
+
+
+// --------------------------------
 // SETUP
 // --------------------------------
 
@@ -243,7 +253,7 @@ function draw() {
     );
 
     text(
-      "reveal what's hidden",
+      "reveal what's hidden.",
       width / 2,
       height * 0.10
     );
@@ -266,29 +276,9 @@ function draw() {
     );
 
     text(
-      "the bubble is gone",
+      "the bubble is gone.",
       width / 2,
-      height * 0.10
-    );
-
-
-    // Small instruction underneath.
-
-    fill(
-      255,
-      255,
-      255,
-      110
-    );
-
-    textSize(
-      min(width, height) * 0.022
-    );
-
-    text(
-      "tap to continue",
-      width / 2,
-      height * 0.16
+      height / 2
     );
   }
 
@@ -331,37 +321,59 @@ function draw() {
 
 
   // --------------------------------
-  // SUBMISSION CONFIRMATION
+  // DRAWING WAVE
   // --------------------------------
 
   if (
     contributionSubmitted
   ) {
 
-    if (submissionStartTime === 0) {
+    if (waveStartTime === 0) {
 
-      submissionStartTime =
+      waveStartTime =
         millis();
     }
 
 
-    let elapsed =
+    let waveElapsed =
       millis() -
-      submissionStartTime;
+      waveStartTime;
 
 
-    submissionFade =
-      constrain(
-        elapsed /
-        submissionFadeDuration,
-        0,
-        1
-      );
-
-
-    drawSubmissionScreen(
-      submissionFade
+    drawContributionWave(
+      waveElapsed
     );
+
+
+    // --------------------------------
+    // CONFIRMATION
+    // --------------------------------
+
+    let confirmationDelay =
+      waveDuration * 0.72;
+
+
+    if (
+      waveElapsed >
+      confirmationDelay
+    ) {
+
+      let confirmationProgress =
+        constrain(
+          (
+            waveElapsed -
+            confirmationDelay
+          ) /
+          submissionFadeDuration,
+          0,
+          1
+        );
+
+
+      drawSubmissionScreen(
+        confirmationProgress
+      );
+    }
   }
 
 
@@ -1342,7 +1354,7 @@ function drawContributionUI(
 
 
   text(
-    "leave something behind",
+    "leave something behind.",
     centreX,
     height * 0.10
   );
@@ -1451,7 +1463,7 @@ function drawContributionUI(
 
 
     text(
-      "draw something",
+      "draw something.",
       centreX,
       drawingY +
       drawingHeight / 2
@@ -1527,6 +1539,298 @@ function drawContributionUI(
 
 
 // ================================================
+// DRAWING WAVE
+// ================================================
+
+function drawContributionWave(
+  elapsed
+) {
+
+  if (
+    drawingPoints.length === 0
+  ) {
+    return;
+  }
+
+
+  let progress =
+    constrain(
+      elapsed /
+      waveDuration,
+      0,
+      1
+    );
+
+
+  // --------------------------------
+  // DRAWING BOUNDS
+  // --------------------------------
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+
+  for (
+    let i = 0;
+    i < drawingPoints.length;
+    i++
+  ) {
+
+    let point =
+      drawingPoints[i];
+
+
+    minX =
+      min(
+        minX,
+        point.x
+      );
+
+
+    maxX =
+      max(
+        maxX,
+        point.x
+      );
+
+
+    minY =
+      min(
+        minY,
+        point.y
+      );
+
+
+    maxY =
+      max(
+        maxY,
+        point.y
+      );
+  }
+
+
+  let originalWidth =
+    maxX - minX;
+
+
+  let originalHeight =
+    maxY - minY;
+
+
+  let centreX =
+    (minX + maxX) / 2;
+
+
+  let centreY =
+    (minY + maxY) / 2;
+
+
+  // --------------------------------
+  // MAKE THE DRAWING LARGE
+  // --------------------------------
+
+  let targetSize =
+    min(width, height) *
+    0.42;
+
+
+  let originalSize =
+    max(
+      originalWidth,
+      originalHeight,
+      20
+    );
+
+
+  let scale =
+    targetSize /
+    originalSize;
+
+
+  // --------------------------------
+  // MULTIPLE WAVES
+  // --------------------------------
+
+  let copyCount = 13;
+
+
+  for (
+    let copy = 0;
+    copy < copyCount;
+    copy++
+  ) {
+
+    let offset =
+      copy / copyCount;
+
+
+    // Each copy follows the previous one.
+
+    let copyProgress =
+      progress -
+      offset * 0.55;
+
+
+    if (
+      copyProgress < 0
+    ) {
+      continue;
+    }
+
+
+    // Move upward.
+
+    let travel =
+      copyProgress *
+      (height + targetSize * 2);
+
+
+    let waveX =
+      width / 2 +
+      sin(
+        copyProgress * 360 +
+        copy * 45
+      ) *
+      width *
+      0.24;
+
+
+    let waveY =
+      height +
+      targetSize -
+      travel;
+
+
+    // Make some copies larger.
+
+    let pulse =
+      1 +
+      sin(
+        copyProgress * 360 +
+        copy * 50
+      ) *
+      0.12;
+
+
+    let alpha =
+      180 *
+      (1 - copy * 0.035);
+
+
+    // Fade them in and out naturally.
+
+    if (
+      copyProgress < 0.12
+    ) {
+
+      alpha *=
+        copyProgress /
+        0.12;
+    }
+
+
+    if (
+      copyProgress > 0.82
+    ) {
+
+      alpha *=
+        1 -
+        (
+          copyProgress -
+          0.82
+        ) /
+        0.18;
+    }
+
+
+    push();
+
+
+    translate(
+      waveX,
+      waveY
+    );
+
+
+    rotate(
+      sin(
+        copyProgress * 300 +
+        copy * 40
+      ) *
+      15
+    );
+
+
+    scale(
+      scale *
+      pulse
+    );
+
+
+    translate(
+      -centreX,
+      -centreY
+    );
+
+
+    stroke(
+      255,
+      255,
+      255,
+      alpha
+    );
+
+    strokeWeight(
+      3 /
+      scale
+    );
+
+    noFill();
+
+
+    // --------------------------------
+    // RECREATE DRAWING
+    // --------------------------------
+
+    for (
+      let i = 1;
+      i < drawingPoints.length;
+      i++
+    ) {
+
+      let previous =
+        drawingPoints[i - 1];
+
+
+      let current =
+        drawingPoints[i];
+
+
+      if (
+        current.newStroke ||
+        previous.newStroke
+      ) {
+        continue;
+      }
+
+
+      line(
+        previous.x,
+        previous.y,
+        current.x,
+        current.y
+      );
+    }
+
+
+    pop();
+  }
+}
+
+
+// ================================================
 // SUBMISSION SCREEN
 // ================================================
 
@@ -1541,10 +1845,6 @@ function drawSubmissionScreen(
   let centreY =
     height / 2;
 
-
-  // --------------------------------
-  // TITLE
-  // --------------------------------
 
   textAlign(
     CENTER,
@@ -1567,33 +1867,9 @@ function drawSubmissionScreen(
 
 
   text(
-    "your contribution has been added",
+    "your contribution has been added.",
     centreX,
-    centreY - height * 0.04
-  );
-
-
-  // --------------------------------
-  // SMALL FOLLOW-UP
-  // --------------------------------
-
-  textSize(
-    min(width, height) * 0.023
-  );
-
-
-  fill(
-    255,
-    255,
-    255,
-    110 * fade
-  );
-
-
-  text(
-    "thank you for leaving something behind",
-    centreX,
-    centreY + height * 0.035
+    centreY
   );
 }
 
@@ -1724,7 +2000,7 @@ function mousePressed() {
 
       contributionSubmitted = true;
 
-      submissionStartTime =
+      waveStartTime =
         millis();
 
       console.log(
