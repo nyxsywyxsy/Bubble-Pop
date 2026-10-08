@@ -23,6 +23,17 @@ let distortionLevel = 0;
 
 let lastFrameTime = 0;
 
+// --------------------------------
+// DRAWING CONTRIBUTION
+// --------------------------------
+
+let contributionFade = 0;
+let contributionSubmitted = false;
+let drawingPoints = [];
+
+let contributionStartTime = 0;
+let contributionFadeDuration = 1800;
+
 
 // --------------------------------
 // SETUP
@@ -241,10 +252,62 @@ function draw() {
 
   } else {
 
+    // Fade the original text out slightly
+    // as the contribution UI appears.
+
+    let textAlpha =
+      230 -
+      contributionFade * 100;
+
+    fill(
+      255,
+      255,
+      255,
+      textAlpha
+    );
+
     text(
       "the bubble is gone",
       width / 2,
       height * 0.10
+    );
+  }
+
+
+  // --------------------------------
+  // CONTRIBUTION UI
+  // --------------------------------
+
+  if (bubblePopped) {
+
+    // Start the fade only once the bubble
+    // has completely disappeared.
+
+    if (contributionStartTime === 0) {
+
+      contributionStartTime =
+        millis();
+    }
+
+
+    let fadeProgress =
+      (
+        millis() -
+        contributionStartTime
+      ) /
+      contributionFadeDuration;
+
+
+    contributionFade =
+      constrain(
+        fadeProgress,
+        0,
+        1
+      );
+
+
+    drawContributionUI(
+      contributionFade
     );
   }
 
@@ -1175,6 +1238,446 @@ function drawMinionInsideBubble(
   drawingContext.restore();
 
   pop();
+}
+
+
+// ================================================
+// CONTRIBUTION UI
+// ================================================
+
+function drawContributionUI(
+  fade
+) {
+
+  let centreX =
+    width / 2;
+
+
+  // --------------------------------
+  // DRAWING AREA
+  // --------------------------------
+
+  let drawingWidth =
+    min(
+      width * 0.78,
+      430
+    );
+
+
+  let drawingHeight =
+    min(
+      height * 0.34,
+      260
+    );
+
+
+  let drawingX =
+    centreX -
+    drawingWidth / 2;
+
+
+  let drawingY =
+    height * 0.24;
+
+
+  // --------------------------------
+  // CONTRIBUTION MESSAGE
+  // --------------------------------
+
+  textAlign(
+    CENTER,
+    CENTER
+  );
+
+  textFont("Georgia");
+
+  textSize(
+    min(width, height) * 0.035
+  );
+
+
+  if (!contributionSubmitted) {
+
+    fill(
+      255,
+      255,
+      255,
+      210 * fade
+    );
+
+
+    text(
+      "leave something behind",
+      centreX,
+      height * 0.18
+    );
+
+  } else {
+
+    fill(
+      255,
+      255,
+      255,
+      230 * fade
+    );
+
+
+    text(
+      "your contribution has been added",
+      centreX,
+      height * 0.18
+    );
+  }
+
+
+  // --------------------------------
+  // DRAWING BOX
+  // --------------------------------
+
+  stroke(
+    255,
+    255,
+    255,
+    100 * fade
+  );
+
+  strokeWeight(1.5);
+
+  fill(
+    10,
+    15,
+    18,
+    100 * fade
+  );
+
+
+  rect(
+    drawingX,
+    drawingY,
+    drawingWidth,
+    drawingHeight,
+    18
+  );
+
+
+  // --------------------------------
+  // DRAWING
+  // --------------------------------
+
+  if (drawingPoints.length > 0) {
+
+    stroke(
+      255,
+      255,
+      255,
+      220 * fade
+    );
+
+    strokeWeight(3);
+
+    noFill();
+
+
+    for (
+      let i = 1;
+      i < drawingPoints.length;
+      i++
+    ) {
+
+      let previous =
+        drawingPoints[i - 1];
+
+
+      let current =
+        drawingPoints[i];
+
+
+      // Break between separate strokes.
+
+      if (
+        current.newStroke ||
+        previous.newStroke
+      ) {
+        continue;
+      }
+
+
+      line(
+        previous.x,
+        previous.y,
+        current.x,
+        current.y
+      );
+    }
+  }
+
+
+  // --------------------------------
+  // HELPER TEXT
+  // --------------------------------
+
+  if (
+    drawingPoints.length === 0 &&
+    !contributionSubmitted
+  ) {
+
+    noStroke();
+
+    fill(
+      255,
+      255,
+      255,
+      90 * fade
+    );
+
+    textSize(
+      min(width, height) * 0.025
+    );
+
+
+    text(
+      "draw something",
+      centreX,
+      drawingY +
+      drawingHeight / 2
+    );
+  }
+
+
+  // --------------------------------
+  // SUBMIT BUTTON
+  // --------------------------------
+
+  if (!contributionSubmitted) {
+
+    let buttonWidth =
+      min(
+        width * 0.55,
+        250
+      );
+
+
+    let buttonHeight =
+      48;
+
+
+    let buttonX =
+      centreX -
+      buttonWidth / 2;
+
+
+    let buttonY =
+      drawingY +
+      drawingHeight +
+      28;
+
+
+    noStroke();
+
+    fill(
+      255,
+      255,
+      255,
+      220 * fade
+    );
+
+
+    rect(
+      buttonX,
+      buttonY,
+      buttonWidth,
+      buttonHeight,
+      24
+    );
+
+
+    fill(
+      0,
+      0,
+      0,
+      230 * fade
+    );
+
+
+    textSize(
+      min(width, height) * 0.021
+    );
+
+
+    text(
+      "SUBMIT CONTRIBUTION",
+      centreX,
+      buttonY +
+      buttonHeight / 2
+    );
+  }
+}
+
+
+// ================================================
+// DRAWING INPUT
+// ================================================
+
+function mouseDragged() {
+
+  if (
+    !bubblePopped ||
+    contributionSubmitted ||
+    contributionFade < 0.7
+  ) {
+    return;
+  }
+
+
+  let drawingWidth =
+    min(
+      width * 0.78,
+      430
+    );
+
+
+  let drawingHeight =
+    min(
+      height * 0.34,
+      260
+    );
+
+
+  let drawingX =
+    width / 2 -
+    drawingWidth / 2;
+
+
+  let drawingY =
+    height * 0.24;
+
+
+  // Only draw inside the drawing box.
+
+  if (
+    mouseX >= drawingX &&
+    mouseX <= drawingX + drawingWidth &&
+    mouseY >= drawingY &&
+    mouseY <= drawingY + drawingHeight
+  ) {
+
+    drawingPoints.push({
+      x: mouseX,
+      y: mouseY,
+      newStroke: false
+    });
+  }
+
+
+  return false;
+}
+
+
+// --------------------------------
+// START NEW DRAWING STROKE
+// --------------------------------
+
+function mousePressed() {
+
+  if (
+    !bubblePopped ||
+    contributionSubmitted ||
+    contributionFade < 0.7
+  ) {
+    return;
+  }
+
+
+  let drawingWidth =
+    min(
+      width * 0.78,
+      430
+    );
+
+
+  let drawingHeight =
+    min(
+      height * 0.34,
+      260
+    );
+
+
+  let drawingX =
+    width / 2 -
+    drawingWidth / 2;
+
+
+  let drawingY =
+    height * 0.24;
+
+
+  // --------------------------------
+  // DRAWING AREA
+  // --------------------------------
+
+  if (
+    mouseX >= drawingX &&
+    mouseX <= drawingX + drawingWidth &&
+    mouseY >= drawingY &&
+    mouseY <= drawingY + drawingHeight
+  ) {
+
+    drawingPoints.push({
+      x: mouseX,
+      y: mouseY,
+      newStroke: true
+    });
+
+    return false;
+  }
+
+
+  // --------------------------------
+  // SUBMIT BUTTON
+  // --------------------------------
+
+  let buttonWidth =
+    min(
+      width * 0.55,
+      250
+    );
+
+
+  let buttonHeight =
+    48;
+
+
+  let buttonX =
+    width / 2 -
+    buttonWidth / 2;
+
+
+  let buttonY =
+    drawingY +
+    drawingHeight +
+    28;
+
+
+  if (
+    mouseX >= buttonX &&
+    mouseX <= buttonX + buttonWidth &&
+    mouseY >= buttonY &&
+    mouseY <= buttonY + buttonHeight
+  ) {
+
+    if (
+      drawingPoints.length > 0
+    ) {
+
+      contributionSubmitted = true;
+
+      console.log(
+        "CONTRIBUTION ADDED"
+      );
+    }
+
+    return false;
+  }
 }
 
 
