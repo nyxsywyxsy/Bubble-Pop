@@ -1,4 +1,3 @@
-```javascript
 let minion;
 
 function preload() {
@@ -196,6 +195,7 @@ function draw() {
   // Small bubble shine
   noStroke();
   fill(255, 255, 255, 130);
+
   ellipse(
     bubbleX - bubbleSize * 0.27,
     bubbleY - bubbleSize * 0.27,
@@ -212,5 +212,3 @@ function draw() {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
-```
-
