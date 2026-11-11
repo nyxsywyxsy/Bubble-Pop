@@ -6,15 +6,12 @@
   Room: a1-glade
   App: bubble-pop
 
-  Playtest sequence:
-  1. Person A starts the drawing.
-  2. Person B receives it and adds to it, or passes.
-  3. Person C receives the latest version and adds to it, or passes.
-  4. Continue passing the drawing between participants.
-
-  IMPORTANT:
-  Only one person should take a turn at a time.
-  The facilitator guides the order manually.
+  Features:
+  - Shared drawing across phones
+  - Persistent room state
+  - Turn-by-turn drawing and passing
+  - End session / reset room
+  - Black and white visual style
 */
 
 // --------------------------------------------------
@@ -25,14 +22,25 @@ const SHARE_HOST = "https://p5-phone-share.npuckett.workers.dev";
 const SHARE_ROOM = "a1-glade";
 const SHARE_APP = "bubble-pop";
 
-// This is the starting state for a new shared room.
-// Existing room state is not automatically erased.
 const INITIAL_SHARED_STATE = {
   strokes: [],
   version: 0,
   turnCount: 0,
   lastAction: "created"
 };
+
+// --------------------------------------------------
+// COLOURS
+// --------------------------------------------------
+
+const BACKGROUND = "#000000";
+const PAPER = "#101010";
+const INK = "#FFFFFF";
+const WHITE = "#FFFFFF";
+const MUTED = "#B5B5B5";
+const BORDER = "#555555";
+const BUTTON = "#FFFFFF";
+const BUTTON_TEXT = "#000000";
 
 // --------------------------------------------------
 // LOCAL VARIABLES
@@ -44,18 +52,12 @@ let currentStroke = null;
 
 let canvasArea;
 let leftButton;
-let rightButton;
+let middleButton;
+let endButton;
+
+let endSessionArmed = false;
 
 let message = "Waiting for the room...";
-let lastConnectionState = false;
-
-// Visual settings
-const BACKGROUND = "#F3F0E9";
-const PAPER = "#FFFFFF";
-const INK = "#252525";
-const MUTED = "#77736E";
-const ACCENT = "#596D80";
-const BORDER = "#DCD8D0";
 
 // --------------------------------------------------
 // SETUP
@@ -64,11 +66,15 @@ const BORDER = "#DCD8D0";
 function setup() {
   createCanvas(windowWidth, windowHeight);
 
-  pixelDensity(1);
-  textFont("Georgia");
+  // Use the device's display density for sharper text.
+  // Do not force pixelDensity(1), which can blur text
+  // on high-density phone screens.
+  pixelDensity(displayDensity());
+
+  textFont("Arial");
   angleMode(DEGREES);
 
-  // Configure the shared room.
+  // Set up shared room and enable persistence.
   shareSetup({
     host: SHARE_HOST,
     room: SHARE_ROOM,
@@ -76,15 +82,14 @@ function setup() {
     shared: INITIAL_SHARED_STATE,
     me: {
       role: "participant"
-    }
+    },
+    keep: true
   });
 
-  // Show a QR code when the sketch is opened on a computer.
   showDesktopQr({
     label: "Scan to join Bubble Pop"
   });
 
-  // Each phone joins through a tap.
   enableShareTap({
     label: "Tap to join Bubble Pop"
   });
@@ -92,9 +97,12 @@ function setup() {
   updateLayout();
 }
 
-// Called when the room has connected and its shared state is ready.
+// --------------------------------------------------
+// SHARE CALLBACK
+// --------------------------------------------------
+
 function shareReady() {
-  message = "You're connected. Waiting for your turn.";
+  message = "Connected";
 }
 
 // --------------------------------------------------
@@ -119,7 +127,7 @@ function draw() {
 
 function updateLayout() {
   const areaTop = 125;
-  const areaBottom = height - 105;
+  const areaBottom = height - 120;
 
   canvasArea = {
     x: 18,
@@ -128,10 +136,10 @@ function updateLayout() {
     h: max(100, areaBottom - areaTop)
   };
 
-  const buttonY = height - 76;
-  const buttonH = 54;
-  const gap = 10;
-  const buttonW = (width - 36 - gap) / 2;
+  const buttonY = height - 85;
+  const buttonH = 52;
+  const gap = 7;
+  const buttonW = (width - 36 - gap * 2) / 3;
 
   leftButton = {
     x: 18,
@@ -140,8 +148,15 @@ function updateLayout() {
     h: buttonH
   };
 
-  rightButton = {
+  middleButton = {
     x: 18 + buttonW + gap,
+    y: buttonY,
+    w: buttonW,
+    h: buttonH
+  };
+
+  endButton = {
+    x: 18 + (buttonW + gap) * 2,
     y: buttonY,
     w: buttonW,
     h: buttonH
@@ -153,43 +168,39 @@ function updateLayout() {
 // --------------------------------------------------
 
 function drawHeader() {
+  const data = getSharedData();
+
   noStroke();
-  fill(INK);
+  fill(WHITE);
 
   textAlign(LEFT, TOP);
   textSize(25);
   text("bubble pop", 20, 18);
 
-  textSize(12);
+  textSize(13);
   fill(MUTED);
-  text("A drawing passed between people.", 21, 51);
-
-  // Shared room connection status.
-  const connected = Boolean(window.shareConnected);
+  text("A drawing passed between people.", 21, 53);
 
   textAlign(RIGHT, TOP);
-  textSize(11);
+  textSize(12);
 
-  if (connected) {
-    fill("#55765D");
-    text("CONNECTED", width - 20, 23);
+  if (window.shareConnected) {
+    fill(WHITE);
+    text("CONNECTED", width - 20, 25);
   } else {
-    fill("#A46B55");
-    text("CONNECTING...", width - 20, 23);
+    fill(MUTED);
+    text("CONNECTING...", width - 20, 25);
   }
-
-  // Version and turn information.
-  const data = getSharedData();
 
   textAlign(LEFT, TOP);
   fill(MUTED);
-  textSize(12);
+  textSize(13);
 
   text(
-    "Version " + data.version + "  ·  " +
+    "Version " + data.version + "   ·   " +
     data.turnCount + " turns",
     21,
-    82
+    88
   );
 }
 
@@ -198,7 +209,6 @@ function drawHeader() {
 // --------------------------------------------------
 
 function drawDrawingArea() {
-  // White paper background.
   noStroke();
   fill(PAPER);
 
@@ -207,10 +217,9 @@ function drawDrawingArea() {
     canvasArea.y,
     canvasArea.w,
     canvasArea.h,
-    12
+    10
   );
 
-  // Light border.
   noFill();
   stroke(BORDER);
   strokeWeight(1);
@@ -220,18 +229,18 @@ function drawDrawingArea() {
     canvasArea.y,
     canvasArea.w,
     canvasArea.h,
-    12
+    10
   );
 
-  noStroke();
-
-  // Instructions inside an empty drawing area.
   const data = getSharedData();
 
   if (data.strokes.length === 0 && localStrokes.length === 0) {
-    fill("#B0AAA1");
+    noStroke();
+    fill(MUTED);
+
     textAlign(CENTER, CENTER);
     textSize(17);
+
     text(
       "A drawing will begin here.",
       width / 2,
@@ -287,8 +296,8 @@ function drawStroke(strokeData) {
     const px = canvasArea.x + points[0].x * canvasArea.w;
     const py = canvasArea.y + points[0].y * canvasArea.h;
 
-    fill(strokeData.color || INK);
     noStroke();
+    fill(strokeData.color || INK);
 
     circle(px, py, strokeData.weight || 4);
     return;
@@ -315,47 +324,56 @@ function drawFooter() {
 
   drawButton(
     leftButton,
-    drawingMode ? "DRAWING..." : "MY TURN",
-    drawingMode,
+    drawingMode ? "DRAWING" : "MY TURN",
     connected
   );
 
   drawButton(
-    rightButton,
-    drawingMode ? "FINISH TURN" : "PASS",
-    false,
+    middleButton,
+    drawingMode ? "FINISH" : "PASS",
     connected
   );
 
-  // Small instruction beneath the buttons.
+  drawButton(
+    endButton,
+    endSessionArmed ? "CONFIRM?" : "END SESSION",
+    connected
+  );
+
   fill(MUTED);
+  noStroke();
+
   textAlign(CENTER, TOP);
-  textSize(10);
+  textSize(12);
 
   if (drawingMode) {
     text(
       "Draw on the paper, then finish your turn.",
       width / 2,
-      height - 17
+      height - 23
+    );
+  } else if (endSessionArmed) {
+    text(
+      "Tap CONFIRM? again to erase this session.",
+      width / 2,
+      height - 23
     );
   } else {
     text(
       "Wait until the facilitator calls on you.",
       width / 2,
-      height - 17
+      height - 23
     );
   }
 }
 
-function drawButton(button, label, active, connected) {
+function drawButton(button, label, connected) {
   noStroke();
 
   if (!connected) {
-    fill("#D6D2CB");
-  } else if (active) {
-    fill("#8494A1");
+    fill("#555555");
   } else {
-    fill(ACCENT);
+    fill(BUTTON);
   }
 
   rect(
@@ -363,12 +381,13 @@ function drawButton(button, label, active, connected) {
     button.y,
     button.w,
     button.h,
-    10
+    8
   );
 
-  fill("#FFFFFF");
+  fill(connected ? BUTTON_TEXT : WHITE);
+
   textAlign(CENTER, CENTER);
-  textSize(13);
+  textSize(12);
 
   text(
     label,
@@ -382,28 +401,43 @@ function drawButton(button, label, active, connected) {
 // --------------------------------------------------
 
 function mousePressed() {
-  // Do nothing until connected.
   if (!window.shareConnected) return;
 
-  // Left button: begin a turn.
+  // END SESSION
+  if (insideButton(mouseX, mouseY, endButton)) {
+    if (endSessionArmed) {
+      endSession();
+    } else {
+      endSessionArmed = true;
+    }
+
+    return;
+  }
+
+  // Any other action cancels the end-session confirmation.
+  endSessionArmed = false;
+
+  // MY TURN
   if (insideButton(mouseX, mouseY, leftButton)) {
     if (!drawingMode) {
       startTurn();
     }
+
     return;
   }
 
-  // Right button: finish or pass.
-  if (insideButton(mouseX, mouseY, rightButton)) {
+  // FINISH / PASS
+  if (insideButton(mouseX, mouseY, middleButton)) {
     if (drawingMode) {
       finishTurn();
     } else {
       passTurn();
     }
+
     return;
   }
 
-  // Start a drawing stroke.
+  // START DRAWING
   if (drawingMode && insideDrawingArea(mouseX, mouseY)) {
     currentStroke = {
       color: INK,
@@ -439,9 +473,6 @@ function mouseReleased() {
 
 function addDrawingPoint(x, y) {
   if (!currentStroke) return;
-
-  // Store points as normalized values.
-  // This allows drawings to scale between different phone sizes.
 
   const normalizedX = constrain(
     (x - canvasArea.x) / canvasArea.w,
@@ -489,14 +520,11 @@ function startTurn() {
   drawingMode = true;
   localStrokes = [];
   currentStroke = null;
-
-  message = "You're editing the shared drawing.";
 }
 
 function finishTurn() {
   if (!window.shareConnected) return;
 
-  // Include the final stroke if the pointer is still down.
   if (currentStroke && currentStroke.points.length > 0) {
     localStrokes.push(currentStroke);
   }
@@ -505,7 +533,6 @@ function finishTurn() {
 
   const data = getSharedData();
 
-  // Only update the shared artwork if something was drawn.
   if (localStrokes.length > 0) {
     const updatedStrokes = data.strokes.concat(localStrokes);
 
@@ -513,18 +540,14 @@ function finishTurn() {
     window.shared.version = data.version + 1;
     window.shared.lastAction = "edited";
   } else {
-    // A turn can be completed without changing the drawing.
     window.shared.lastAction = "passed";
   }
 
   window.shared.turnCount = data.turnCount + 1;
 
-  // Return to observation mode.
   drawingMode = false;
   localStrokes = [];
   currentStroke = null;
-
-  message = "Your turn is finished. Pass the phone's turn to someone else.";
 }
 
 function passTurn() {
@@ -534,8 +557,24 @@ function passTurn() {
 
   window.shared.lastAction = "passed";
   window.shared.turnCount = data.turnCount + 1;
+}
 
-  message = "You passed. The drawing stays unchanged.";
+// --------------------------------------------------
+// END SESSION
+// --------------------------------------------------
+
+function endSession() {
+  if (!window.shareConnected) return;
+
+  // Clear the drawing for EVERY phone in the room.
+  // This also erases the server's saved copy.
+  shareClear();
+
+  // Reset local interface.
+  drawingMode = false;
+  localStrokes = [];
+  currentStroke = null;
+  endSessionArmed = false;
 }
 
 // --------------------------------------------------
