@@ -2,25 +2,27 @@
 /*
   BUBBLE POP — COLLABORATIVE PLAYTEST
 
-  Shared drawing:
-  - Circular drawing canvas
-  - Shared between all phones
-  - Persistent room state
-  - Manual turn-taking
+  Shared:
+  - Circular collaborative drawing
+  - Persistent room
+  - Shared tilt-triggered glitch
+  - Shared shake effect
 
-  Waiting interaction:
-  - Floating bubbles around the canvas
-  - Tap bubbles to pop them
-  - New bubbles appear as others pop
-  - Bubble popping is individual to each phone
+  Individual:
+  - Floating bubbles
+  - Bubble popping animation
+  - Drawing during your turn
+
+  Hidden interaction:
+  Tilt your phone to glitch the shared drawing.
 
   Room: a1-glade
   App: bubble-pop
 */
 
-// --------------------------------------------------
-// SHARE SETTINGS
-// --------------------------------------------------
+// ==================================================
+// 1. SHARE SETTINGS
+// ==================================================
 
 const SHARE_HOST = "https://p5-phone-share.npuckett.workers.dev";
 const SHARE_ROOM = "a1-glade";
@@ -30,27 +32,34 @@ const INITIAL_SHARED_STATE = {
   strokes: [],
   version: 0,
   turnCount: 0,
-  lastAction: "created"
+  lastAction: "created",
+
+  glitchStartedAt: 0,
+  glitchDuration: 0,
+  glitchStrength: 0,
+  glitchPulse: 0,
+  shakeUntil: 0,
+  glitchSource: ""
 };
 
-// --------------------------------------------------
-// VISUAL SETTINGS
-// --------------------------------------------------
+// ==================================================
+// 2. VISUAL SETTINGS
+// ==================================================
 
 const BACKGROUND = "#000000";
-const PAPER = "#101010";
+const PAPER = "#080808";
 const WHITE = "#FFFFFF";
 const MUTED = "#B5B5B5";
-const BORDER = "#555555";
 
 const STROKE_COLOR = "#FFFFFF";
 const STROKE_WEIGHT = 4;
 
-const WAITING_BUBBLE_COUNT = 24;
+const POP_DURATION = 1500;
+const WAITING_BUBBLE_COUNT = 40;
 
-// --------------------------------------------------
-// LOCAL VARIABLES
-// --------------------------------------------------
+// ==================================================
+// 3. LOCAL VARIABLES
+// ==================================================
 
 let drawingMode = false;
 
@@ -60,14 +69,36 @@ let currentStroke = null;
 let canvasArea;
 
 let leftButton;
-let rightButton;
+let middleButton;
 
 let waitingBubbles = [];
 let bubblePopAnimations = [];
 
-// --------------------------------------------------
-// SETUP
-// --------------------------------------------------
+let lastShake = 0;
+
+// Tilt calibration and detection
+let tiltCalibrationFrames = 0;
+let tiltCalibrationTotalX = 0;
+let tiltCalibrationTotalY = 0;
+
+let tiltBaselineX = 0;
+let tiltBaselineY = 0;
+
+let tiltCalibrated = false;
+let tiltArmed = true;
+
+let tiltNeutralSince = 0;
+let lastTiltTrigger = 0;
+
+const TILT_CALIBRATION_SAMPLES = 30;
+const TILT_TRIGGER_ANGLE = 28;
+const TILT_RESET_ANGLE = 12;
+const TILT_COOLDOWN = 1800;
+const TILT_RESET_TIME = 500;
+
+// ==================================================
+// 4. SETUP
+// ==================================================
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -76,6 +107,8 @@ function setup() {
 
   textFont("Arial");
   angleMode(DEGREES);
+
+  lockGestures();
 
   shareSetup({
     host: SHARE_HOST,
@@ -90,39 +123,61 @@ function setup() {
 
   showDesktopQr();
 
-  enableShareTap({
-    label: "Tap to join Bubble Pop"
-  });
+  // One permission prompt for room sharing
+  // and phone motion sensors.
+  enablePermissionsTap(
+    ["gyro", "share"],
+    "Tap to join Bubble Pop and enable motion"
+  );
+
+  setShakeThreshold(110);
 
   updateLayout();
   createWaitingBubbles();
 }
 
-// --------------------------------------------------
-// SHARE CALLBACK
-// --------------------------------------------------
+// ==================================================
+// 5. SHARE CALLBACK
+// ==================================================
 
 function shareReady() {
   console.log("Bubble Pop connected.");
 }
 
-// --------------------------------------------------
-// MAIN DRAW LOOP
-// --------------------------------------------------
+// ==================================================
+// 6. MAIN DRAW LOOP
+// ==================================================
 
 function draw() {
   background(BACKGROUND);
 
   updateLayout();
 
+  // Check for a hidden tilt gesture.
+  checkForTiltDistortion();
+
+  const effect = getSharedEffect();
+
+  // Shared shake movement.
+  let shakeX = 0;
+  let shakeY = 0;
+
+  if (effect.shaking) {
+    const elapsed = Date.now() - effect.startedAt;
+
+    shakeX = Math.sin(elapsed * 0.07) * 5 * effect.level;
+    shakeY = Math.cos(elapsed * 0.09) * 4 * effect.level;
+  }
+
+  push();
+  translate(shakeX, shakeY);
+
   drawHeader();
   drawCanvasCircle();
 
-  drawSharedArtwork();
+  drawSharedArtwork(effect.level);
   drawLocalArtwork();
 
-  // Bubbles are individual interactions.
-  // They appear while someone is waiting.
   if (!drawingMode) {
     updateWaitingBubbles();
     drawWaitingBubbles();
@@ -130,35 +185,36 @@ function draw() {
   }
 
   drawFooter();
+
+  pop();
 }
 
-// --------------------------------------------------
-// LAYOUT
-// --------------------------------------------------
+// ==================================================
+// 7. LAYOUT
+// ==================================================
 
 function updateLayout() {
-  const areaTop = 125;
-  const areaBottom = height - 125;
+  const areaTop = 135;
+  const areaBottom = height - 145;
 
   const availableHeight = areaBottom - areaTop;
 
   const diameter = min(
-    width - 72,
-    availableHeight * 0.76
+    width * 0.70,
+    availableHeight * 0.68
   );
-
-  const circleSize = max(190, diameter);
 
   canvasArea = {
     x: width / 2,
     y: (areaTop + areaBottom) / 2,
-    radius: circleSize / 2,
-    diameter: circleSize
+    radius: diameter / 2,
+    diameter: diameter
   };
 
-  const buttonY = height - 85;
+  // Two buttons instead of three.
+  const buttonY = height - 86;
   const buttonH = 52;
-  const gap = 10;
+  const gap = 12;
   const buttonW = (width - 36 - gap) / 2;
 
   leftButton = {
@@ -168,7 +224,7 @@ function updateLayout() {
     h: buttonH
   };
 
-  rightButton = {
+  middleButton = {
     x: 18 + buttonW + gap,
     y: buttonY,
     w: buttonW,
@@ -176,9 +232,9 @@ function updateLayout() {
   };
 }
 
-// --------------------------------------------------
-// HEADER
-// --------------------------------------------------
+// ==================================================
+// 8. HEADER
+// ==================================================
 
 function drawHeader() {
   const data = getSharedData();
@@ -188,17 +244,11 @@ function drawHeader() {
 
   textAlign(LEFT, TOP);
   textSize(25);
-
   text("bubble pop", 20, 18);
 
   fill(MUTED);
   textSize(13);
-
-  text(
-    "A drawing passed between people.",
-    21,
-    53
-  );
+  text("A drawing passed between people.", 21, 53);
 
   textAlign(RIGHT, TOP);
   textSize(12);
@@ -223,14 +273,13 @@ function drawHeader() {
   );
 }
 
-// --------------------------------------------------
-// CIRCULAR CANVAS
-// --------------------------------------------------
+// ==================================================
+// 9. CIRCULAR CANVAS
+// ==================================================
 
 function drawCanvasCircle() {
   push();
 
-  // Dark circular drawing surface.
   noStroke();
   fill(PAPER);
 
@@ -240,28 +289,69 @@ function drawCanvasCircle() {
     canvasArea.diameter
   );
 
-  // Outer border.
+  // Iridescent edge.
   noFill();
-  stroke(BORDER);
-  strokeWeight(1.2);
-
-  circle(
-    canvasArea.x,
-    canvasArea.y,
-    canvasArea.diameter
-  );
-
-  // Subtle bubble-like highlight.
-  stroke(255, 255, 255, 65);
   strokeWeight(2);
 
+  stroke(0, 220, 255, 150);
   arc(
     canvasArea.x,
     canvasArea.y,
-    canvasArea.diameter - 8,
-    canvasArea.diameter - 8,
-    205,
-    255
+    canvasArea.diameter - 5,
+    canvasArea.diameter - 5,
+    200,
+    270
+  );
+
+  stroke(170, 80, 255, 150);
+  arc(
+    canvasArea.x,
+    canvasArea.y,
+    canvasArea.diameter - 5,
+    canvasArea.diameter - 5,
+    270,
+    340
+  );
+
+  stroke(255, 80, 180, 150);
+  arc(
+    canvasArea.x,
+    canvasArea.y,
+    canvasArea.diameter - 5,
+    canvasArea.diameter - 5,
+    340,
+    55
+  );
+
+  stroke(100, 255, 190, 150);
+  arc(
+    canvasArea.x,
+    canvasArea.y,
+    canvasArea.diameter - 5,
+    canvasArea.diameter - 5,
+    55,
+    130
+  );
+
+  stroke(70, 130, 255, 150);
+  arc(
+    canvasArea.x,
+    canvasArea.y,
+    canvasArea.diameter - 5,
+    canvasArea.diameter - 5,
+    130,
+    200
+  );
+
+  // Small reflections.
+  noStroke();
+  fill(255, 255, 255, 100);
+
+  ellipse(
+    canvasArea.x - canvasArea.radius * 0.65,
+    canvasArea.y - canvasArea.radius * 0.67,
+    15,
+    6
   );
 
   pop();
@@ -286,46 +376,97 @@ function drawCanvasCircle() {
   }
 }
 
-// --------------------------------------------------
-// SHARED ARTWORK
-// --------------------------------------------------
+// ==================================================
+// 10. SHARED DRAWING
+// ==================================================
 
-function drawSharedArtwork() {
+function drawSharedArtwork(glitchLevel) {
   const data = getSharedData();
 
-  for (const strokeData of data.strokes) {
-    drawStroke(strokeData);
+  if (data.strokes.length === 0) return;
+
+  if (glitchLevel <= 0.01) {
+    for (const strokeData of data.strokes) {
+      drawStroke(strokeData);
+    }
+
+    return;
   }
+
+  drawGlitchedArtwork(
+    data.strokes,
+    glitchLevel,
+    data.glitchPulse
+  );
 }
 
-// --------------------------------------------------
-// LOCAL ARTWORK
-// --------------------------------------------------
+// ==================================================
+// 11. GLITCH EFFECT
+// RGB separation, horizontal slicing,
+// pixelation, missing sections and glitch bars.
+// ==================================================
 
-function drawLocalArtwork() {
-  for (const strokeData of localStrokes) {
+function drawGlitchedArtwork(strokes, intensity, pulse) {
+  const elapsed = Date.now() - getSharedData().glitchStartedAt;
+
+  const seed = Math.floor(elapsed / 65) + pulse * 1000;
+
+  const shift = intensity * 9;
+
+  // RGB separation.
+  for (const strokeData of strokes) {
+    drawStroke(
+      strokeData,
+      color(255, 50, 90, 120 * intensity),
+      -shift,
+      0
+    );
+
+    drawStroke(
+      strokeData,
+      color(40, 210, 255, 120 * intensity),
+      shift,
+      0
+    );
+  }
+
+  // Normal drawing.
+  for (const strokeData of strokes) {
     drawStroke(strokeData);
   }
 
-  if (currentStroke) {
-    drawStroke(currentStroke);
+  // Horizontal slices.
+  const sliceCount = 3 + floor(intensity * 9);
+
+  for (let i = 0; i < sliceCount; i++) {
+    const sliceHeight = canvasArea.diameter / sliceCount;
+
+    const sliceY =
+      canvasArea.y -
+      canvasArea.radius +
+      i * sliceHeight;
+
+    const direction = i % 2 === 0 ? 1 : -1;
+
+    const sliceShift =
+      direction * intensity *
+      (12 + hashRandom(seed, i) * 38);
+
+    for (const strokeData of strokes) {
+      drawStroke(
+        strokeData,
+        color(255, 255, 255, 210),
+        sliceShift,
+        0,
+        {
+          top: sliceY,
+          bottom: sliceY + sliceHeight + 2
+        }
+      );
+    }
   }
-}
 
-// --------------------------------------------------
-// DRAW STROKES INSIDE THE CIRCLE
-// --------------------------------------------------
-
-function drawStroke(strokeData) {
-  if (!strokeData || !strokeData.points) return;
-
-  const points = strokeData.points;
-
-  if (points.length === 0) return;
-
-  push();
-
-  // Clip everything to the circular canvas.
+  // Pixelation and missing sections.
   drawingContext.save();
   drawingContext.beginPath();
 
@@ -339,7 +480,125 @@ function drawStroke(strokeData) {
 
   drawingContext.clip();
 
-  stroke(strokeData.color || STROKE_COLOR);
+  noStroke();
+
+  const pixelCount = floor(intensity * 65);
+
+  for (let i = 0; i < pixelCount; i++) {
+    const px =
+      canvasArea.x -
+      canvasArea.radius +
+      hashRandom(seed, i * 3) * canvasArea.diameter;
+
+    const py =
+      canvasArea.y -
+      canvasArea.radius +
+      hashRandom(seed, i * 3 + 1) * canvasArea.diameter;
+
+    const blockSize =
+      2 + hashRandom(seed, i * 3 + 2) * intensity * 17;
+
+    fill(0, 0, 0, 170);
+    rect(px, py, blockSize, blockSize);
+  }
+
+  // Glitch bars.
+  const barCount = floor(intensity * 22);
+
+  for (let i = 0; i < barCount; i++) {
+    const barY =
+      canvasArea.y -
+      canvasArea.radius +
+      hashRandom(seed, i + 300) * canvasArea.diameter;
+
+    const barX =
+      canvasArea.x -
+      canvasArea.radius +
+      hashRandom(seed, i + 400) * canvasArea.diameter;
+
+    const barWidth =
+      10 + hashRandom(seed, i + 500) * canvasArea.diameter * 0.8;
+
+    const barHeight =
+      2 + hashRandom(seed, i + 600) * 9;
+
+    fill(0, 0, 0, 190);
+    rect(barX, barY, barWidth, barHeight);
+  }
+
+  // Coloured horizontal bars.
+  for (let i = 0; i < floor(intensity * 7); i++) {
+    const barY =
+      canvasArea.y -
+      canvasArea.radius +
+      hashRandom(seed, i + 700) * canvasArea.diameter;
+
+    fill(0, 220, 255, 120);
+
+    rect(
+      canvasArea.x - canvasArea.radius,
+      barY,
+      canvasArea.diameter * 0.65,
+      2
+    );
+  }
+
+  drawingContext.restore();
+}
+
+function hashRandom(seed, index) {
+  const value = Math.sin(seed * 12.9898 + index * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+// ==================================================
+// 12. DRAW STROKES
+// ==================================================
+
+function drawStroke(
+  strokeData,
+  strokeColour = WHITE,
+  offsetX = 0,
+  offsetY = 0,
+  slice = null
+) {
+  if (!strokeData || !strokeData.points) return;
+
+  const points = strokeData.points;
+
+  if (points.length === 0) return;
+
+  push();
+
+  drawingContext.save();
+  drawingContext.beginPath();
+
+  drawingContext.arc(
+    canvasArea.x,
+    canvasArea.y,
+    canvasArea.radius,
+    0,
+    Math.PI * 2
+  );
+
+  drawingContext.clip();
+
+  if (slice) {
+    drawingContext.beginPath();
+
+    drawingContext.rect(
+      canvasArea.x - canvasArea.radius - 30,
+      slice.top,
+      canvasArea.diameter + 60,
+      slice.bottom - slice.top
+    );
+
+    drawingContext.clip();
+  }
+
+  translate(offsetX, offsetY);
+
+  stroke(strokeColour);
   strokeWeight(strokeData.weight || STROKE_WEIGHT);
   strokeCap(ROUND);
   strokeJoin(ROUND);
@@ -355,9 +614,13 @@ function drawStroke(strokeData) {
       (points[0].y - 0.5) * canvasArea.diameter;
 
     noStroke();
-    fill(strokeData.color || STROKE_COLOR);
+    fill(strokeColour);
 
-    circle(px, py, strokeData.weight || STROKE_WEIGHT);
+    circle(
+      px,
+      py,
+      strokeData.weight || STROKE_WEIGHT
+    );
   } else {
     beginShape();
 
@@ -380,9 +643,191 @@ function drawStroke(strokeData) {
   pop();
 }
 
-// --------------------------------------------------
-// WAITING BUBBLES — CREATE
-// --------------------------------------------------
+// ==================================================
+// 13. LOCAL ARTWORK
+// ==================================================
+
+function drawLocalArtwork() {
+  for (const strokeData of localStrokes) {
+    drawStroke(strokeData);
+  }
+
+  if (currentStroke) {
+    drawStroke(currentStroke);
+  }
+}
+
+// ==================================================
+// 14. HIDDEN TILT INTERACTION
+// ==================================================
+
+function checkForTiltDistortion() {
+  // Wait until the user has enabled motion permissions.
+  if (!window.sensorsEnabled) return;
+
+  if (
+    typeof rotationX !== "number" ||
+    typeof rotationY !== "number"
+  ) {
+    return;
+  }
+
+  // Calibrate the phone's starting position.
+  // This makes the gesture relative to how each
+  // participant is naturally holding their phone.
+  if (!tiltCalibrated) {
+    tiltCalibrationTotalX += rotationX;
+    tiltCalibrationTotalY += rotationY;
+
+    tiltCalibrationFrames++;
+
+    if (tiltCalibrationFrames >= TILT_CALIBRATION_SAMPLES) {
+      tiltBaselineX =
+        tiltCalibrationTotalX / TILT_CALIBRATION_SAMPLES;
+
+      tiltBaselineY =
+        tiltCalibrationTotalY / TILT_CALIBRATION_SAMPLES;
+
+      tiltCalibrated = true;
+
+      console.log("Tilt position calibrated.");
+    }
+
+    return;
+  }
+
+  const differenceX = angleDifference(
+    rotationX,
+    tiltBaselineX
+  );
+
+  const differenceY = angleDifference(
+    rotationY,
+    tiltBaselineY
+  );
+
+  const tiltAmount = Math.sqrt(
+    differenceX * differenceX +
+    differenceY * differenceY
+  );
+
+  // Trigger once when the phone is tilted far enough.
+  if (
+    tiltArmed &&
+    tiltAmount >= TILT_TRIGGER_ANGLE &&
+    Date.now() - lastTiltTrigger > TILT_COOLDOWN
+  ) {
+    tiltArmed = false;
+    lastTiltTrigger = Date.now();
+
+    triggerSharedDistortion("tilt");
+
+    console.log("Hidden tilt interaction triggered.");
+  }
+
+  // The phone must return close to its starting
+  // position before the gesture can be used again.
+  if (tiltAmount <= TILT_RESET_ANGLE) {
+    if (tiltNeutralSince === 0) {
+      tiltNeutralSince = Date.now();
+    }
+
+    if (
+      !tiltArmed &&
+      Date.now() - tiltNeutralSince >= TILT_RESET_TIME
+    ) {
+      tiltArmed = true;
+      console.log("Tilt interaction ready again.");
+    }
+  } else {
+    tiltNeutralSince = 0;
+  }
+}
+
+// Handles angle wraparound.
+function angleDifference(current, baseline) {
+  let difference = current - baseline;
+
+  while (difference > 180) difference -= 360;
+  while (difference < -180) difference += 360;
+
+  return difference;
+}
+
+// ==================================================
+// 15. SHARED DISTORTION
+// ==================================================
+
+function triggerSharedDistortion(source) {
+  if (!window.shareConnected) return;
+
+  const data = getSharedData();
+  const now = Date.now();
+
+  const isShake = source === "shake";
+
+  window.shared.glitchStartedAt = now;
+
+  window.shared.glitchDuration =
+    isShake ? 2300 : 3800;
+
+  window.shared.glitchStrength =
+    isShake ? 1 : 0.85;
+
+  window.shared.glitchPulse =
+    data.glitchPulse + 1;
+
+  window.shared.shakeUntil =
+    isShake ? now + 750 : now;
+
+  window.shared.glitchSource = source;
+
+  console.log("Shared distortion:", source);
+}
+
+// ==================================================
+// 16. SHARED EFFECT STATE
+// ==================================================
+
+function getSharedEffect() {
+  const data = getSharedData();
+
+  if (!data.glitchStartedAt || !data.glitchDuration) {
+    return {
+      level: 0,
+      shaking: false,
+      startedAt: 0
+    };
+  }
+
+  const now = Date.now();
+
+  const elapsed = max(
+    0,
+    now - data.glitchStartedAt
+  );
+
+  const progress = constrain(
+    elapsed / data.glitchDuration,
+    0,
+    1
+  );
+
+  const level =
+    progress >= 1
+      ? 0
+      : data.glitchStrength * (1 - progress * 0.65);
+
+  return {
+    level: level,
+    shaking: now < data.shakeUntil,
+    startedAt: data.glitchStartedAt
+  };
+}
+
+// ==================================================
+// 17. WAITING BUBBLES
+// ==================================================
 
 function createWaitingBubbles() {
   waitingBubbles = [];
@@ -393,18 +838,19 @@ function createWaitingBubbles() {
 }
 
 function makeWaitingBubble() {
-  let x;
-  let y;
-  let size;
+  const size = random(
+    min(width, height) * 0.025,
+    min(width, height) * 0.065
+  );
 
-  let foundPosition = false;
+  let x = width / 2;
+  let y = height / 2;
 
-  size = random(25, 55);
+  let found = false;
 
-  // Try to find a position outside the main circle.
-  for (let attempt = 0; attempt < 100; attempt++) {
-    x = random(18 + size / 2, width - 18 - size / 2);
-    y = random(110 + size / 2, height - 115 - size / 2);
+  for (let attempt = 0; attempt < 120; attempt++) {
+    x = random(size, width - size);
+    y = random(115 + size, height - 125 - size);
 
     const distance = dist(
       x,
@@ -413,43 +859,33 @@ function makeWaitingBubble() {
       canvasArea.y
     );
 
-    if (
-      distance >
-      canvasArea.radius + size * 0.55
-    ) {
-      foundPosition = true;
+    if (distance > canvasArea.radius + size * 0.65) {
+      found = true;
       break;
     }
   }
 
-  // Fallback position if the screen is too small.
-  if (!foundPosition) {
-    x = random(width);
-    y = random(height);
+  if (!found) {
+    x = random(size, width - size);
+    y = random(height - 150, height - 110);
   }
 
   return {
     x: x,
     y: y,
     size: size,
-
-    speed: random(0.35, 1.15),
-
+    speed: random(0.6, 2),
     phase: random(360),
-    drift: random(0.2, 0.65),
-
     rotation: random(360),
-    rotationSpeed: random(-0.35, 0.35),
-
-    alpha: random(100, 190),
-
+    rotationSpeed: random(-0.5, 0.5),
+    alpha: random(90, 210),
     popping: false
   };
 }
 
-// --------------------------------------------------
-// WAITING BUBBLES — UPDATE
-// --------------------------------------------------
+// ==================================================
+// 18. UPDATE WAITING BUBBLES
+// ==================================================
 
 function updateWaitingBubbles() {
   for (let i = 0; i < waitingBubbles.length; i++) {
@@ -457,22 +893,18 @@ function updateWaitingBubbles() {
 
     if (b.popping) continue;
 
-    // Gentle upward movement.
     b.y -= b.speed;
 
-    // Gentle sideways movement.
-    b.x += sin(frameCount * 0.7 + b.phase) * b.drift;
+    b.x += Math.sin(frameCount * 0.7 + b.phase) * 0.25;
 
     b.rotation += b.rotationSpeed;
 
-    // Keep inside the screen horizontally.
     b.x = constrain(
       b.x,
       b.size / 2,
       width - b.size / 2
     );
 
-    // Avoid floating through the drawing circle.
     const distance = dist(
       b.x,
       b.y,
@@ -480,102 +912,148 @@ function updateWaitingBubbles() {
       canvasArea.y
     );
 
-    if (
-      distance <
-      canvasArea.radius + b.size * 0.55
-    ) {
-      b.y -= b.speed + 0.5;
+    if (distance < canvasArea.radius + b.size * 0.65) {
+      b.y -= b.speed * 1.5;
     }
 
-    // Reappear at the bottom.
     if (b.y < -b.size) {
       waitingBubbles[i] = makeWaitingBubble();
-      waitingBubbles[i].y = height + random(20, 100);
+
+      waitingBubbles[i].y =
+        height + random(30, 200);
     }
   }
 }
 
-// --------------------------------------------------
-// WAITING BUBBLES — DRAW
-// --------------------------------------------------
+// ==================================================
+// 19. DRAW WAITING BUBBLES
+// ==================================================
 
 function drawWaitingBubbles() {
   for (const b of waitingBubbles) {
     if (!b.popping) {
-      drawWaitingBubble(b);
+      drawOriginalStyleBubble(b);
     }
   }
 }
 
-function drawWaitingBubble(b) {
+function drawOriginalStyleBubble(b) {
   push();
 
   translate(b.x, b.y);
   rotate(b.rotation);
 
-  // Transparent dark interior.
+  const alpha = b.alpha;
+
   noStroke();
-  fill(255, 255, 255, 8);
 
-  circle(0, 0, b.size);
+  fill(5, 25, 35, 150);
+  ellipse(0, 0, b.size, b.size);
 
-  // Iridescent bubble edge.
+  fill(0, 220, 255, 25);
+  ellipse(
+    -b.size * 0.15,
+    -b.size * 0.15,
+    b.size * 0.7,
+    b.size * 0.6
+  );
+
+  fill(170, 80, 255, 25);
+  ellipse(
+    b.size * 0.15,
+    0,
+    b.size * 0.65,
+    b.size * 0.7
+  );
+
+  fill(255, 80, 180, 20);
+  ellipse(
+    0,
+    b.size * 0.18,
+    b.size * 0.7,
+    b.size * 0.5
+  );
+
   noFill();
-  strokeWeight(2.2);
 
-  stroke(0, 220, 255, b.alpha);
-  arc(0, 0, b.size, b.size, 190, 270);
+  strokeWeight(max(1, b.size * 0.012));
 
-  stroke(170, 80, 255, b.alpha);
-  arc(0, 0, b.size, b.size, 270, 340);
+  stroke(0, 220, 255, alpha);
+  arc(0, 0, b.size * 0.94, b.size * 0.94, 200, 285);
 
-  stroke(255, 80, 180, b.alpha);
-  arc(0, 0, b.size, b.size, 340, 55);
+  stroke(170, 80, 255, alpha);
+  arc(0, 0, b.size * 0.94, b.size * 0.94, 285, 350);
 
-  stroke(70, 130, 255, b.alpha);
-  arc(0, 0, b.size, b.size, 55, 120);
+  stroke(255, 90, 190, alpha);
+  arc(0, 0, b.size * 0.94, b.size * 0.94, 350, 55);
 
-  stroke(100, 255, 190, b.alpha);
-  arc(0, 0, b.size, b.size, 120, 190);
+  stroke(80, 150, 255, alpha);
+  arc(0, 0, b.size * 0.94, b.size * 0.94, 55, 130);
 
-  // Main white reflection.
+  stroke(100, 255, 190, alpha);
+  arc(0, 0, b.size * 0.94, b.size * 0.94, 130, 200);
+
   noStroke();
-  fill(255, 255, 255, 155);
 
+  fill(255, 255, 255, 120);
   ellipse(
     -b.size * 0.22,
     -b.size * 0.25,
-    b.size * 0.22,
-    b.size * 0.10
+    b.size * 0.18,
+    b.size * 0.09
   );
 
-  fill(255, 255, 255, 100);
-
-  circle(
-    b.size * 0.24,
-    b.size * 0.22,
-    b.size * 0.07
+  fill(255, 255, 255, 70);
+  ellipse(
+    b.size * 0.25,
+    b.size * 0.25,
+    b.size * 0.06,
+    b.size * 0.06
   );
 
   pop();
 }
 
-// --------------------------------------------------
-// BUBBLE POPPING
-// --------------------------------------------------
+// ==================================================
+// 20. POP A WAITING BUBBLE
+// ==================================================
 
 function popWaitingBubble(b) {
   if (b.popping) return;
 
-  b.popping = true;
+  const droplets = [];
+
+  for (let i = 0; i < 20; i++) {
+    const angle = random(360);
+    const speed = random(1, 4.5);
+
+    droplets.push({
+      x: b.x,
+      y: b.y,
+      vx: cos(angle) * speed,
+      vy: sin(angle) * speed,
+      size: random(2, 6),
+      r: random(100, 255),
+      g: random(100, 255),
+      blue: random(180, 255),
+      alpha: 220
+    });
+  }
 
   bubblePopAnimations.push({
     x: b.x,
     y: b.y,
-    size: b.size,
-    startTime: millis()
+    startTime: millis(),
+    droplets: droplets,
+    bubble: b
   });
+
+  b.popping = true;
 }
+
+// ==================================================
+// 21. BUBBLE POP ANIMATION
+// ==================================================
 
 function drawBubblePopAnimations() {
   for (
@@ -585,57 +1063,205 @@ function drawBubblePopAnimations() {
   ) {
     const animation = bubblePopAnimations[i];
 
-    const elapsed = millis() - animation.startTime;
-    const progress = constrain(elapsed / 400, 0, 1);
+    drawOriginalPopAnimation(animation);
 
-    const size = animation.size * (1 + progress * 0.8);
-    const alpha = 180 * (1 - progress);
-
-    noFill();
-    stroke(255, 255, 255, alpha);
-    strokeWeight(2);
-
-    circle(
-      animation.x,
-      animation.y,
-      size
-    );
-
-    // Small white particles.
-    for (let j = 0; j < 5; j++) {
-      const angle = j * 72;
-      const distance = progress * animation.size * 0.55;
-
-      noStroke();
-      fill(255, 255, 255, alpha);
-
-      circle(
-        animation.x + cos(angle) * distance,
-        animation.y + sin(angle) * distance,
-        3 * (1 - progress)
-      );
-    }
-
-    if (progress >= 1) {
+    if (millis() - animation.startTime > POP_DURATION) {
       bubblePopAnimations.splice(i, 1);
 
-      // Replace the popped bubble.
-      const index = waitingBubbles.findIndex(
-        b => b.popping &&
-          dist(b.x, b.y, animation.x, animation.y) < 1
-      );
+      const index = waitingBubbles.indexOf(animation.bubble);
 
       if (index !== -1) {
         waitingBubbles[index] = makeWaitingBubble();
-        waitingBubbles[index].y = height + random(30, 100);
+
+        waitingBubbles[index].y =
+          height + random(30, 200);
       }
     }
   }
 }
 
-// --------------------------------------------------
-// FOOTER / BUTTONS
-// --------------------------------------------------
+function drawOriginalPopAnimation(animation) {
+  const elapsed = millis() - animation.startTime;
+
+  const progress = constrain(
+    elapsed / POP_DURATION,
+    0,
+    1
+  );
+
+  const eased = 1 - pow(1 - progress, 3);
+
+  const centerX = animation.x;
+  const centerY = animation.y;
+
+  // White splash streaks.
+  for (let i = 0; i < 14; i++) {
+    const angle =
+      i * (360 / 14) +
+      sin(i * 41) * 12;
+
+    const delay = (i % 4) * 0.035;
+
+    const splashProgress = constrain(
+      (progress - delay) / (1 - delay),
+      0,
+      1
+    );
+
+    const splashEased =
+      1 - pow(1 - splashProgress, 2.5);
+
+    const innerDistance =
+      min(width, height) * 0.02;
+
+    const outerDistance =
+      min(width, height) *
+      (0.10 + (i % 3) * 0.035);
+
+    const startDistance =
+      innerDistance + splashEased * outerDistance;
+
+    const streakLength =
+      min(width, height) *
+      (0.015 + splashEased * 0.035);
+
+    const startX =
+      centerX + cos(angle) * startDistance;
+
+    const startY =
+      centerY + sin(angle) * startDistance;
+
+    const endX =
+      centerX + cos(angle) *
+      (startDistance + streakLength);
+
+    const endY =
+      centerY + sin(angle) *
+      (startDistance + streakLength);
+
+    stroke(
+      255,
+      255,
+      255,
+      190 * (1 - splashProgress)
+    );
+
+    strokeWeight(min(width, height) * 0.004);
+    strokeCap(ROUND);
+
+    line(startX, startY, endX, endY);
+  }
+
+  // Coloured splash streaks.
+  const splashColours = [
+    [0, 220, 255],
+    [170, 80, 255],
+    [255, 80, 180],
+    [100, 255, 190],
+    [255, 230, 100]
+  ];
+
+  for (let i = 0; i < splashColours.length; i++) {
+    const angle = i * 72 + 18;
+
+    const splashProgress = constrain(
+      progress - i * 0.045,
+      0,
+      1
+    );
+
+    const splashEased =
+      1 - pow(1 - splashProgress, 2.5);
+
+    const distance =
+      min(width, height) *
+      (0.035 + splashEased * 0.18);
+
+    const length =
+      min(width, height) *
+      (0.02 + splashEased * 0.02);
+
+    const x1 = centerX + cos(angle) * distance;
+    const y1 = centerY + sin(angle) * distance;
+
+    const x2 = centerX + cos(angle) * (distance + length);
+    const y2 = centerY + sin(angle) * (distance + length);
+
+    stroke(
+      splashColours[i][0],
+      splashColours[i][1],
+      splashColours[i][2],
+      170 * (1 - splashProgress)
+    );
+
+    strokeWeight(min(width, height) * 0.006);
+    strokeCap(ROUND);
+
+    line(x1, y1, x2, y2);
+  }
+
+  // Central flash.
+  noStroke();
+
+  fill(255, 255, 255, 170 * (1 - progress));
+
+  const flashSize =
+    min(width, height) * 0.07 * eased;
+
+  ellipse(centerX, centerY, flashSize, flashSize);
+
+  // Moving droplets.
+  for (const d of animation.droplets) {
+    d.x += d.vx;
+    d.y += d.vy;
+    d.vy += 0.018;
+
+    d.alpha *= 0.985;
+
+    const direction = atan2(d.vy, d.vx);
+
+    push();
+
+    translate(d.x, d.y);
+    rotate(direction);
+
+    noStroke();
+
+    fill(
+      d.r,
+      d.g,
+      d.blue,
+      d.alpha * (1 - progress * 0.5)
+    );
+
+    ellipse(
+      0,
+      0,
+      d.size * 2.8,
+      d.size * 1.7
+    );
+
+    fill(
+      255,
+      255,
+      255,
+      d.alpha * 0.35 * (1 - progress)
+    );
+
+    ellipse(
+      -d.size * 0.35,
+      -d.size * 0.25,
+      d.size * 0.55,
+      d.size * 0.25
+    );
+
+    pop();
+  }
+}
+
+// ==================================================
+// 22. BUTTONS
+// ==================================================
 
 function drawFooter() {
   drawButton(
@@ -644,7 +1270,7 @@ function drawFooter() {
   );
 
   drawButton(
-    rightButton,
+    middleButton,
     drawingMode ? "FINISH" : "PASS"
   );
 
@@ -652,17 +1278,17 @@ function drawFooter() {
   fill(MUTED);
 
   textAlign(CENTER, TOP);
-  textSize(12);
+  textSize(11);
 
   if (drawingMode) {
     text(
-      "Add to the drawing, then finish your turn.",
+      "Draw inside the bubble, then finish your turn.",
       width / 2,
       height - 23
     );
   } else {
     text(
-      "Tap the floating bubbles while you wait.",
+      "Take your time. Pass when you're ready.",
       width / 2,
       height - 23
     );
@@ -672,11 +1298,7 @@ function drawFooter() {
 function drawButton(button, label) {
   noStroke();
 
-  fill(
-    window.shareConnected
-      ? WHITE
-      : "#555555"
-  );
+  fill(window.shareConnected ? WHITE : "#555555");
 
   rect(
     button.x,
@@ -686,14 +1308,10 @@ function drawButton(button, label) {
     8
   );
 
-  fill(
-    window.shareConnected
-      ? "#000000"
-      : WHITE
-  );
+  fill(window.shareConnected ? "#000000" : WHITE);
 
   textAlign(CENTER, CENTER);
-  textSize(13);
+  textSize(12);
 
   text(
     label,
@@ -702,14 +1320,14 @@ function drawButton(button, label) {
   );
 }
 
-// --------------------------------------------------
-// INPUT
-// --------------------------------------------------
+// ==================================================
+// 23. INPUT
+// ==================================================
 
 function mousePressed() {
   if (!window.shareConnected) return;
 
-  // First check whether a waiting bubble was tapped.
+  // Pop a floating bubble.
   if (!drawingMode) {
     for (let i = waitingBubbles.length - 1; i >= 0; i--) {
       const b = waitingBubbles[i];
@@ -717,36 +1335,36 @@ function mousePressed() {
       if (b.popping) continue;
 
       if (
-        dist(mouseX, mouseY, b.x, b.y) <
-        b.size / 2 + 12
+        dist(mouseX, mouseY, b.x, b.y) <=
+        b.size / 2 + 10
       ) {
         popWaitingBubble(b);
-        return;
+        return false;
       }
     }
   }
 
-  // MY TURN
+  // MY TURN.
   if (insideButton(mouseX, mouseY, leftButton)) {
     if (!drawingMode) {
       startTurn();
     }
 
-    return;
+    return false;
   }
 
-  // FINISH / PASS
-  if (insideButton(mouseX, mouseY, rightButton)) {
+  // FINISH / PASS.
+  if (insideButton(mouseX, mouseY, middleButton)) {
     if (drawingMode) {
       finishTurn();
     } else {
       passTurn();
     }
 
-    return;
+    return false;
   }
 
-  // Start a stroke inside the circular canvas.
+  // Start a drawing stroke inside the circle.
   if (
     drawingMode &&
     insideDrawingCircle(mouseX, mouseY)
@@ -759,6 +1377,8 @@ function mousePressed() {
 
     addDrawingPoint(mouseX, mouseY);
   }
+
+  return false;
 }
 
 function mouseDragged() {
@@ -767,6 +1387,8 @@ function mouseDragged() {
   if (insideDrawingCircle(mouseX, mouseY)) {
     addDrawingPoint(mouseX, mouseY);
   }
+
+  return false;
 }
 
 function mouseReleased() {
@@ -777,21 +1399,21 @@ function mouseReleased() {
 
     currentStroke = null;
   }
+
+  return false;
 }
 
-// --------------------------------------------------
-// CIRCULAR DRAWING HELPERS
-// --------------------------------------------------
+// ==================================================
+// 24. DRAWING HELPERS
+// ==================================================
 
 function insideDrawingCircle(x, y) {
-  return (
-    dist(
-      x,
-      y,
-      canvasArea.x,
-      canvasArea.y
-    ) <= canvasArea.radius
-  );
+  return dist(
+    x,
+    y,
+    canvasArea.x,
+    canvasArea.y
+  ) <= canvasArea.radius;
 }
 
 function insideButton(x, y, button) {
@@ -806,7 +1428,6 @@ function insideButton(x, y, button) {
 function addDrawingPoint(x, y) {
   if (!currentStroke) return;
 
-  // Store normalized coordinates relative to the circle.
   const normalizedX = constrain(
     (x - canvasArea.x) / canvasArea.diameter + 0.5,
     0,
@@ -825,9 +1446,9 @@ function addDrawingPoint(x, y) {
   });
 }
 
-// --------------------------------------------------
-// TURN SYSTEM
-// --------------------------------------------------
+// ==================================================
+// 25. TURN SYSTEM
+// ==================================================
 
 function startTurn() {
   if (!window.shareConnected) return;
@@ -877,9 +1498,25 @@ function passTurn() {
   window.shared.turnCount = data.turnCount + 1;
 }
 
-// --------------------------------------------------
-// SHARED DATA
-// --------------------------------------------------
+// ==================================================
+// 26. PHONE SHAKE
+// ==================================================
+
+function deviceShaken() {
+  if (!window.shareConnected) return;
+
+  if (millis() - lastShake < 1200) return;
+
+  lastShake = millis();
+
+  triggerSharedDistortion("shake");
+
+  console.log("SHARED SHAKE");
+}
+
+// ==================================================
+// 27. SHARED DATA
+// ==================================================
 
 function getSharedData() {
   const room = window.shared || {};
@@ -893,19 +1530,29 @@ function getSharedData() {
 
     turnCount: Number(room.turnCount) || 0,
 
-    lastAction: room.lastAction || "created"
+    lastAction: room.lastAction || "created",
+
+    glitchStartedAt: Number(room.glitchStartedAt) || 0,
+
+    glitchDuration: Number(room.glitchDuration) || 0,
+
+    glitchStrength: Number(room.glitchStrength) || 0,
+
+    glitchPulse: Number(room.glitchPulse) || 0,
+
+    shakeUntil: Number(room.shakeUntil) || 0,
+
+    glitchSource: room.glitchSource || ""
   };
 }
 
-// --------------------------------------------------
-// RESIZE
-// --------------------------------------------------
+// ==================================================
+// 28. RESIZE
+// ==================================================
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 
   updateLayout();
-
-  // Reposition the bubbles for the new screen size.
   createWaitingBubbles();
 }
