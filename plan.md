@@ -2,201 +2,202 @@
 
 ## Project
 
-A phone as an unusual communication interface, to experiment with altering and uncovering an anonymous message, for public participants.
+Bubble Pop is a collaborative phone-based experience where people contribute to one shared piece of media. Each person uses their own phone to add something to a drawing before it gets passed to the next person.
 
-This Phase 1 prototype explores an unusual form of communication through a large interactive bubble. The participant is given the instruction "reveal what's hidden" and has to experiment with the phone to discover how the bubble responds.
+This version focuses on testing how a drawing changes when it is passed between multiple people. Instead of everyone creating something separate, each person receives the same drawing and adds to what is already there.
 
-The larger idea is an anonymous communication system where people can contribute to and change media created by other people without necessarily knowing who originally created it. For this first prototype, I am only testing the interaction with one person and one bubble.
+The larger idea is still an anonymous communication system where people can interact with and change media created by others without necessarily knowing who originally made it. This version is a smaller test of that idea, focusing on shared drawing and turn-taking.
 
 ## The question
 
-Does giving the user different options to uncover and interact with the message encourage them to experiment? Will they uncover all the ways of interaction? 
-Observing people use this in a playtest and seeing which ways they interacted with the bubble and if they experimented beyond one action  would help me get the evidence to answer this.
+Does passing one shared drawing between people create a sense of collaboration? How do people approach adding to something that someone else has already started, and does the drawing naturally develop into something collectively made?
 
+I want to see whether people build on each other's ideas, how much they change the existing drawing, and whether the experience feels collaborative even though everyone is using their own phone.
 
 ## The experience
 
-One person holds a phone with the screen facing them.
+Each participant uses their own phone to access Bubble Pop. All phones connect to the same shared room, so everyone sees the same drawing.
 
-The starting screen is mostly occupied by one large, flowy, transparent blue bubble inspired by a real soap bubble. A hidden image of a Minion sits inside the bubble.
+The experience starts with a mostly black screen, a circular drawing area in the centre, and two buttons at the bottom.
 
-The only instruction on the starting screen is:
+The main drawing area is a dark circle with a subtle border and bubble-like highlight. This is where the shared artwork develops.
 
-"reveal what's hidden"
+When someone is ready to contribute, they tap **MY TURN**. This opens drawing mode and allows them to draw inside the circle using their finger.
 
-The participant is not told which movement they should use. The goal is for them to experiment with the phone and discover the different responses.
+Once they are finished, they tap **FINISH**. Their drawing is added to the shared artwork, and the updated version becomes visible on everyone's phone.
 
-When the phone is slightly tilted, the hidden Minion gradually becomes more visible as its opacity increases.
+If someone does not want to add anything, they can tap **PASS** instead.
 
-As the participant tilts the phone further, the Minion becomes increasingly distorted. Its contrast increases significantly and the image begins glitching and dispersing.
+The next person can then take their turn. For this playtest, I manually guide the order and let participants know when it is their turn. The prototype does not automatically choose or assign the next person.
 
-If the participant aggressively shakes the phone, the bubble pops and disappears. The Minion also disappears. The remaining output is either the Minion's glasses or a message that says "the bubble is gone." This should make it feel like the Minion itself disappeared with the bubble.
+While someone is waiting, small floating bubbles move around the screen outside the main drawing area. Participants can tap these bubbles to pop them. New bubbles appear to replace the ones that disappear. This is a separate interaction on each phone and does not affect the shared drawing.
 
-The participant can also tap the screen to contribute something. This opens a drawing interface where they can make a small drawing. If the drawing interface does not work reliably, I will use a text input instead.
+As more people contribute, the drawing develops through everyone's additions. The screen also displays the current version number and number of turns.
 
-After the participant contributes, the prototype displays a message confirming that their contribution has been added. The contribution does not need to actually enter a server or reach another participant in Phase 1.
+## Input, transformation, output
 
-The people watching should be able to see the participant physically experimenting with the phone and see the bubble respond to their actions.
+- **Input:**
+  - Touchscreen interaction on each participant's phone.
+  - Tapping MY TURN to start drawing.
+  - Drawing with a finger inside the circular canvas.
+  - Tapping FINISH to submit a contribution.
+  - Tapping PASS to skip a turn.
+  - Tapping the floating bubbles while waiting.
 
-## Input, transformation, output, fallback
+- **Transformation:**
+  - When someone starts their turn, the drawing interface allows them to add new strokes.
+  - Drawing points are saved using normalized coordinates so they can display correctly across different screen sizes.
+  - When someone finishes, their strokes are added to the existing shared drawing.
+  - The shared version number increases when a new drawing contribution is submitted.
+  - The turn count increases when someone finishes or passes.
+  - When a floating bubble is tapped, an individual pop animation plays and another bubble appears.
 
-- Input: phone tilt, phone movement/shaking, touch/tap, and drawing or text input.
+- **Output:**
+  - A shared circular drawing displayed on every connected phone.
+  - New drawing contributions appearing on all devices.
+  - A version number and turn count showing the progress of the drawing.
+  - Floating bubbles that move around the screen while participants wait.
+  - Individual bubble-pop animations.
+  - A connection status showing whether the phone is connected to the shared room.
 
-- Transformation:
-  - Slight tilt: gradually increase the image's opacity so it becomes more visible.
-  - Further tilt: increase the image contrast and introduce glitching and dispersal.
-  - Aggressive shaking: trigger the bubble popping and remove the Minion.
-  - Tap: open the contribution interface.
-  - Drawing: create a small participant contribution.
+## How the shared system works
 
-- Output:
-  - A large transparent blue soap-like bubble.
-  - The hidden image gradually becoming visible.
-  - Increasing distortion, contrast, glitching, and dispersal as the phone is tilted further.
-  - The bubble popping and disappearing after aggressive shaking.
-  - "the bubble is gone" after the bubble disappears.
-  - A drawing interface and confirmation after the participant contributes.
+The prototype uses p5.js and JavaScript for the interface and drawing interactions, along with the p5-phone Share system to connect multiple phones.
 
-- Fallback:
-  - If motion sensing is unreliable, use a tap interaction as a fallback so the participant can still continue the experience.
-  - If the drawing interface does not work reliably, use a simple text input instead.
-  - On a laptop, use mouse interaction to mimic movement only where needed for testing. The phone is the main test because the final interaction depends on tilt and shaking.
+The current setup uses:
 
-## References
+- Share server: `https://p5-phone-share.npuckett.workers.dev`
+- Room: `a1-glade`
+- App: `bubble-pop`
 
-| File | Use it as | Take | Leave |
-|---|---|---|---|
-|layout-starting.png|a guideline for the starting layout|the overall idea and centering/ layout|the rough lines and writing|
-|layout-after-tilt.png|a guideline for how the image will display once revealed|the overall idea and centering/ layout and the mask|the rough lines and text and diagonal lines (will be replaced with the photo - minion.jpg)|
-| layout-after-shake.png | a guideline for the animation and text display after an aggressive shake. | the layout and idea as well as text wording | rough lines and writing |
-|real-bubble-refrence.webp| inspiration for what the bubble should look like | the colourful shadows, subtle reflection, and contrast against the dark background |the exact colouring of the bubble itself, i want more of a dark blue/ teal as the base|
+Each phone connects to the same room through the internet. The shared state contains:
 
+- `strokes`: the drawing data added by everyone.
+- `version`: the number of times the drawing has been updated.
+- `turnCount`: the number of turns taken, including passes.
+- `lastAction`: records whether the latest action was an edit or a pass.
+
+Instead of sending an image of the drawing, the prototype shares the actual drawing strokes as points. Each stroke stores its colour, thickness, and normalized position.
+
+The shared room uses `keep: true`, so the current shared drawing can remain available when someone refreshes their phone. This is not a full archive of every previous version; it keeps the current shared state.
+
+The waiting bubbles are separate from the shared drawing. Each phone creates and pops its own floating bubbles locally.
 
 ## Limits
 
-- Change only `sketch.js` unless I specifically ask for another file to be changed.
-- Keep the prototype focused on one user and one bubble.
-- The first prototype does not need a server, database, account system, or real distributed network.
-- The participant's contribution does not need to be sent to another person yet.
-- Use one pre-made image for the hidden media.
-- Keep the main physical interactions to tilt, shaking, and tapping.
-- Do not add extra gestures unless they become necessary during testing.
-- Drawing is the preferred contribution method. Text is the fallback.
-- The larger anonymous communication network is a future development.
-- Do not build the full multi-person system for Phase 1.
+- Keep the prototype focused on one shared drawing and multiple phones.
+- Keep the circular drawing area as the main focus.
+- The drawing tool currently uses one colour: white.
+- Do not add accounts or participant names. The experience should remain anonymous.
+- Turn-taking is guided manually rather than automatically assigned by the system.
+- The floating bubbles are individual interactions and are not shared between phones.
+- The version number tracks drawing updates, but there is not yet a full visual history of previous versions.
+- The current prototype uses one shared room rather than separate group and server-wide modes.
+- The shared system uses p5-phone Share. It is not yet a larger permanent media database.
+- Keep the project focused on testing how people contribute to and change shared media before adding more complicated features.
 
 ## How I will check it
 
 - On my laptop:
-  - The bubble appears correctly.
-  - The image is hidden at the start.
-  - The bubble can be interacted with using the available fallback controls.
-  - The contribution interface opens.
-  - Drawing or text input works.
-  - The confirmation message appears.
-  - There are no major console errors.
+  - The main drawing circle displays correctly.
+  - The shared room connects successfully.
+  - The drawing appears and updates when someone finishes a turn.
+  - The version number and turn count update correctly.
+  - MY TURN, FINISH, and PASS work.
+  - Floating bubbles move, pop, and get replaced.
+  - The layout adjusts to different screen sizes.
 
-- On my phone:
-  - The bubble fills most of the screen and is readable.
-  - The bubble looks transparent, blue, flowy, and similar to a soap bubble.
-  - Slight tilting gradually reveals the Minion.
-  - Further tilting creates stronger contrast, glitching, and dispersal.
-  - Aggressive shaking makes the bubble pop and disappear.
-  - "the bubble is gone" appears afterward.
-  - Tapping opens the contribution interaction.
-  - Drawing works, or the text fallback works if necessary.
+- On multiple phones:
+  - Each phone can connect to the same room.
+  - Everyone sees the same shared drawing.
+  - A drawing made on one phone appears on the others.
+  - New contributions are added without removing previous ones.
+  - The drawing stays in the shared room if someone refreshes their phone.
+  - Touch interactions work properly on mobile.
+  - Participants can take turns without needing repeated explanations.
 
 - During the playtest:
-  - Record what participants try first.
-  - Record whether they experiment with tilting or shaking.
-  - Record whether they discover that different movements have different outcomes.
-  - Record whether they understand the instruction "reveal what's hidden."
-  - Record whether they try tapping or discover the contribution interaction.
-  - Record moments of confusion or unexpected interaction.
-  - Record what participants find interesting or unusual.
+  - Record how people approach adding to an existing drawing.
+  - See whether people build on the previous person's contribution or try to change its direction.
+  - Notice whether people consider how much space is left for others.
+  - See whether the first person's contribution influences the rest of the drawing.
+  - Notice whether people feel like they are working together, even though they are using separate phones.
+  - Record moments of surprise, laughter, hesitation, or confusion.
+  - Ask what participants would change or add to the experience.
+
+## Current implementation
+
+The current `sketch.js` already includes:
+
+- A responsive phone-sized interface.
+- A circular shared drawing area.
+- Shared drawing data through p5-phone Share.
+- Drawing with a finger on a phone.
+- MY TURN, FINISH, and PASS buttons.
+- Shared version and turn counters.
+- A connection status.
+- Floating bubbles that move around the screen.
+- Individual bubble-popping interactions.
+- Persistent shared room state.
+
+The main interaction has been tested with five participants using their own phones. Everyone successfully received and added to the same drawing, and the drawing transferred between all five devices.
+
+## Changes and next steps
+
+Based on the playtest, there are a few things I want to explore:
+
+- Add multiple drawing colours so participants have more creative freedom and can tell which parts were added by different people.
+- Consider a bubble-pop counter since participants enjoyed popping the floating bubbles while waiting.
+- Explore ways to give the first person a starting point without having their drawing completely determine the direction of everyone else's contributions.
+- Look at ways to make the different contributions more visually distinguishable.
+- Continue testing how the drawing changes as more people add to it.
+- Explore a way to show more of the drawing's history, rather than only displaying the current version number.
+- Keep the shared drawing interaction as the foundation before adding more types of media or more complicated systems.
 
 ## Steps
-Step 1 — Inspect the existing sketch.js
 
-Before changing anything, I want to work from your actual current code, rather than replacing your existing setup with something unrelated.
+**Step 1 — Set up the shared room**
 
-Step 2 — Get the basic visual experience working
+Connect each phone to the same p5-phone Share server, room, and app. Make sure the shared state is available across devices.
 
-We'll make sure:
+**Step 2 — Create the shared drawing area**
 
-phone-sized canvas
-blue transparent bubble
-bubble fills the screen appropriately
-hidden Minion
-“reveal what's hidden”
-initial state matches your starting reference
-Step 3 — Add phone tilt
+Set up the responsive circular canvas where everyone will contribute. Make sure the drawing stays inside the circle and displays correctly on different screen sizes.
 
-We'll make the actual phone orientation control the Minion's opacity.
+**Step 3 — Add shared drawing**
 
-Something conceptually like:
+Allow participants to draw with their fingers. Store the strokes as shared drawing data so they can be displayed on every connected phone.
 
-small tilt
-→ 10% visible
-→ 20%
-→ 30%
-→ 50%
-→ 70%
+**Step 4 — Add turn-taking**
 
-rather than simply having the image appear when someone moves.
+Add MY TURN, FINISH, and PASS buttons so participants can control when they contribute. For this version, the order is guided manually during the playtest.
 
-Step 4 — Add the second layer of tilt
+**Step 5 — Add the waiting interaction**
 
-Once the reveal works, we'll use stronger tilt to transition into:
+Create the floating bubbles around the main drawing. Let participants tap them to pop them while they wait for their turn.
 
-visible → distorted → glitching → dispersed
+**Step 6 — Add shared progress information**
 
-This is important because it makes the interaction feel like the same physical action has consequences, rather than having a collection of unrelated gestures.
+Display the version number and turn count so participants can see how the drawing has developed.
 
-Step 5 — Add shake detection
+**Step 7 — Test across multiple phones**
 
-We'll distinguish a normal movement from an intentional/aggressive shake.
+Check that the shared drawing updates correctly, that the room stays connected, and that the experience works on actual phones rather than only on a laptop.
 
-Then:
+**Step 8 — Playtest with a group**
 
-shake → bubble pop → Minion disappears → aftermath
-
-Step 6 — Add tap/contribution
-
-Only once the main physical interaction works, we'll add:
-
-tap → contribution screen → drawing → submit → confirmation
-
-If drawing becomes a technical problem, we'll use the text fallback exactly as your plan says.
-
-Step 7 — Make the phone experience reliable
-
-We'll then test:
-
-iPhone/Android behaviour
-screen dimensions
-sensor permission
-orientation
-touch
-shake sensitivity
-accidental triggers
-whether the instruction is readable
-whether the bubble remains visually clear
-Step 8 — Testing setup
-
-Finally we'll make sure the person watching you can actually see the bubble responding to the participant's physical movement, because your rubric specifically cares about the room being able to read the interaction.
-
-## Changes
-
+Have multiple people use their own phones to contribute to the same drawing. Observe how they interact with the existing artwork and what happens as it gets passed around.
 
 ## Public Horizon
 
-The larger version of Bubble Pop could become a distributed anonymous communication system.
+The larger version of Bubble Pop could become a distributed anonymous communication system where people create, receive, and change media made by others.
 
-One participant could create or contribute media to a bubble. The bubble could then be passed to another participant who does not know who originally created it. That person could interact with the bubble, change it, and add something of their own before passing it onward.
+Instead of only working with drawings, the system could eventually include text, images, and voice recordings. Someone could contribute something new, while another person could receive an existing piece of media and choose to edit it or simply observe it.
 
-Over time, the original media could become changed through multiple people's interactions. Participants would not necessarily know who created the original contribution or what happened to it before they received it.
+Participants could potentially choose between a smaller group-based experience and a larger server-wide pool of media from other people using the prototype.
 
-The system could eventually allow different types of media, such as drawings, text, and voice recordings. A bubble could also potentially circle back to previous participants.
+The system could also keep track of how a piece of media changes over time, without necessarily showing who originally created it. This would allow people to see how something has developed through multiple contributions.
 
-This connects to the idea of *Exquisite Corpse*, where multiple people contribute without seeing the complete work and the final result becomes collectively created.
+The current shared drawing is a small version of this idea. It tests how one piece of media can move between people and become something different through everyone's additions.
+
+This connects to the idea of *Exquisite Corpse*, where multiple people contribute to one creative work and the final result becomes something that no single person made on their own.
