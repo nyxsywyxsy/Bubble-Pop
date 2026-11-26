@@ -1,7 +1,6 @@
-
 /*
   BUBBLE POP — TWO-MODE APPLICATION
-  BUILD VERSION: 0.6 — TURN-ONLY ZOOM + LOCAL ERASER
+  BUILD VERSION: 0.7 — TEMPORARY ARTWORK CREATOR
 
   GROUP:
   - Shared collaborative drawing and turn-taking.
@@ -18,6 +17,13 @@
 
   WORLDWIDE:
   - Placeholder for future randomized-media mode.
+
+  TEMPORARY CREATOR:
+  - Draw initial Worldwide artworks.
+  - Save each artwork to shared.worldwide.artworks.
+  - Download a JSON backup of each artwork.
+  - Remove the TEMPORARY CREATOR sections after
+    the starting artwork collection is complete.
 */
 
 const SHARE_HOST = "https://p5-phone-share.npuckett.workers.dev";
@@ -106,6 +112,7 @@ let rightButton = null;
 let modeButton = null;
 let groupMenuButton = null;
 let worldwideMenuButton = null;
+let creatorMenuButton = null;
 let worldwideBackButton = null;
 
 let waitingBubbles = [];
@@ -128,6 +135,35 @@ let zoomInButton = null;
 let brushAdjustmentActive = false;
 let brushPermissionPending = false;
 let tiltBaseline = 0;
+
+// ==================================================
+// TEMPORARY CREATOR — START
+// Used only to make the initial Worldwide artworks.
+// Remove this entire section after the collection
+// has been created and exported.
+// ==================================================
+
+let creatorStrokes = [];
+let creatorCurrentStroke = null;
+let creatorEraserMode = false;
+
+let creatorBackButton = null;
+let creatorSaveButton = null;
+let creatorClearButton = null;
+
+let creatorStatus = "Draw an artwork, then save and export it.";
+let creatorStatusTime = 0;
+
+let creatorToolSettings = {
+  brushColor: "#FFFFFF",
+  brushSize: 4,
+  zoomLevel: MAX_ZOOM
+};
+
+// ==================================================
+// TEMPORARY CREATOR — END
+// ==================================================
+
 
 // --------------------------------------------------
 // SETUP AND SHARE CONNECTION
@@ -281,6 +317,11 @@ const fallbackToolSettings = {
 };
 
 function getActiveToolSettings() {
+  // TEMPORARY CREATOR integration.
+  if (activeMode === "creator") {
+    return creatorToolSettings;
+  }
+
   if (!window.shared) return fallbackToolSettings;
 
   const key = activeMode === "worldwide" ? "worldwide" : "group";
@@ -334,6 +375,12 @@ function draw() {
     return;
   }
 
+  // TEMPORARY CREATOR mode.
+  if (activeMode === "creator") {
+    drawCreator();
+    return;
+  }
+
   if (activeMode === "group") {
     syncVersionBubbles();
 
@@ -368,11 +415,11 @@ function draw() {
 
 function drawModeSelection() {
   const buttonWidth = min(width - 48, 360);
-  const buttonHeight = 100;
-  const gap = 18;
+  const buttonHeight = 76;
+  const gap = 13;
 
   const x = (width - buttonWidth) / 2;
-  const totalHeight = buttonHeight * 2 + gap;
+  const totalHeight = buttonHeight * 3 + gap * 2;
   const startY = height / 2 - totalHeight / 2 + 30;
 
   groupMenuButton = {
@@ -389,15 +436,23 @@ function drawModeSelection() {
     h: buttonHeight
   };
 
+  // TEMPORARY CREATOR menu button.
+  creatorMenuButton = {
+    x,
+    y: startY + (buttonHeight + gap) * 2,
+    w: buttonWidth,
+    h: buttonHeight
+  };
+
   noStroke();
   fill(WHITE);
   textAlign(CENTER, CENTER);
   textSize(min(40, width * 0.1));
-  text("bubble pop", width / 2, startY - 105);
+  text("bubble pop", width / 2, startY - 85);
 
   fill(MUTED);
   textSize(14);
-  text("Choose your experience", width / 2, startY - 65);
+  text("Choose your experience", width / 2, startY - 50);
 
   drawMenuCard(
     groupMenuButton,
@@ -411,6 +466,13 @@ function drawModeSelection() {
     "Discover drawings and prompts left by others."
   );
 
+  // TEMPORARY CREATOR menu card.
+  drawMenuCard(
+    creatorMenuButton,
+    "CREATE STARTING ARTWORK",
+    "Temporary tool for making the first collection."
+  );
+
   fill(MUTED);
   textSize(11);
   textAlign(CENTER, CENTER);
@@ -418,7 +480,7 @@ function drawModeSelection() {
   text(
     window.shareConnected ? "CONNECTED" : "TAP A MODE TO JOIN",
     width / 2,
-    height - 35
+    height - 20
   );
 }
 
@@ -434,15 +496,15 @@ function drawMenuCard(button, heading, description) {
   noStroke();
   fill(WHITE);
   textAlign(CENTER, CENTER);
-  textSize(18);
-  text(heading, button.x + button.w / 2, button.y + 35);
+  textSize(16);
+  text(heading, button.x + button.w / 2, button.y + 25);
 
   fill(MUTED);
-  textSize(12);
+  textSize(11);
   text(
     description,
     button.x + button.w / 2,
-    button.y + 68
+    button.y + 51
   );
 
   pop();
@@ -576,7 +638,6 @@ function updateLayout() {
     });
   }
 
-  // Leave space on the right for the eraser and zoom buttons.
   brushSizeButton = {
     x: 18,
     y: height - 174,
@@ -610,6 +671,28 @@ function updateLayout() {
     y: height - 174,
     w: 36,
     h: 32
+  };
+
+  // TEMPORARY CREATOR buttons.
+  creatorBackButton = {
+    x: width - 142,
+    y: 22,
+    w: 122,
+    h: 34
+  };
+
+  creatorSaveButton = {
+    x: 18,
+    y: height - 84,
+    w: (width - 46) * 0.65,
+    h: 50
+  };
+
+  creatorClearButton = {
+    x: creatorSaveButton.x + creatorSaveButton.w + 10,
+    y: height - 84,
+    w: width - (creatorSaveButton.x + creatorSaveButton.w + 28),
+    h: 50
   };
 }
 
@@ -897,12 +980,15 @@ function drawSharedToolControls() {
     brushSizeTrack.y + 17
   );
 
-  // The eraser is available only during a Group turn.
-  if (activeMode === "group" && drawingMode) {
+  // Group eraser is available only during a Group turn.
+  // Creator eraser is temporary and only affects its own drawing.
+  if (
+    (activeMode === "group" && drawingMode) ||
+    activeMode === "creator"
+  ) {
     drawEraserButton();
   }
 
-  // Zoom is locked while waiting for another participant's turn.
   const zoomAllowed =
     activeMode !== "group" || drawingMode;
 
@@ -923,12 +1009,17 @@ function drawSharedToolControls() {
 }
 
 function drawEraserButton() {
+  const isOn =
+    activeMode === "creator"
+      ? creatorEraserMode
+      : eraserMode;
+
   push();
 
   rectMode(CORNER);
-  stroke(eraserMode ? "#FFE66D" : BORDER);
-  strokeWeight(eraserMode ? 2 : 1);
-  fill(eraserMode ? "#29251A" : PAPER);
+  stroke(isOn ? "#FFE66D" : BORDER);
+  strokeWeight(isOn ? 2 : 1);
+  fill(isOn ? "#29251A" : PAPER);
 
   rect(
     eraserButton.x,
@@ -939,11 +1030,11 @@ function drawEraserButton() {
   );
 
   noStroke();
-  fill(eraserMode ? "#FFE66D" : WHITE);
+  fill(isOn ? "#FFE66D" : WHITE);
   textAlign(CENTER, CENTER);
   textSize(11);
   text(
-    eraserMode ? "ON" : "ER",
+    isOn ? "ON" : "ER",
     eraserButton.x + eraserButton.w / 2,
     eraserButton.y + eraserButton.h / 2
   );
@@ -1019,7 +1110,6 @@ function handleToolControlPress(x, y) {
     return true;
   }
 
-  // Toggle the local eraser during a Group turn.
   if (
     activeMode === "group" &&
     drawingMode &&
@@ -1036,7 +1126,25 @@ function handleToolControlPress(x, y) {
     return true;
   }
 
-  // Group participants cannot change zoom while waiting.
+  // TEMPORARY CREATOR eraser toggle.
+  if (
+    activeMode === "creator" &&
+    insideButton(x, y, eraserButton)
+  ) {
+    if (
+      creatorCurrentStroke &&
+      creatorCurrentStroke.points.length > 0
+    ) {
+      creatorStrokes.push(creatorCurrentStroke);
+    }
+
+    creatorCurrentStroke = null;
+    creatorEraserMode = !creatorEraserMode;
+    brushAdjustmentActive = false;
+
+    return true;
+  }
+
   const zoomAllowed =
     activeMode !== "group" || drawingMode;
 
@@ -1110,13 +1218,11 @@ function userSetupComplete() {
 // LOCAL ERASER
 // --------------------------------------------------
 
-// Eraser radius is based on the current brush size.
 function getEraserRadius() {
   const settings = getActiveToolSettings();
   return max(12, (Number(settings.brushSize) || 4) * 2.5);
 }
 
-// Convert a saved normalized point into its current screen position.
 function getStrokeScreenPoint(point) {
   const zoom = constrain(
     Number(getActiveToolSettings().zoomLevel) || MAX_ZOOM,
@@ -1132,7 +1238,6 @@ function getStrokeScreenPoint(point) {
   };
 }
 
-// Distance from a point to a line segment.
 function distanceToSegment(px, py, ax, ay, bx, by) {
   const dx = bx - ax;
   const dy = by - ay;
@@ -1154,7 +1259,6 @@ function distanceToSegment(px, py, ax, ay, bx, by) {
   return dist(px, py, closestX, closestY);
 }
 
-// Check whether an eraser position touches a particular stroke.
 function strokeTouchesEraser(strokeData, x, y) {
   if (
     !strokeData ||
@@ -1192,7 +1296,6 @@ function strokeTouchesEraser(strokeData, x, y) {
   return false;
 }
 
-// Only localStrokes are checked. Shared strokes are never modified.
 function eraseLocalStrokesAt(x, y) {
   if (!drawingMode || !eraserMode) return;
 
@@ -1202,7 +1305,6 @@ function eraseLocalStrokesAt(x, y) {
     }
   }
 
-  // Also allow removal of an unfinished local stroke.
   if (
     currentStroke &&
     strokeTouchesEraser(currentStroke, x, y)
@@ -1223,6 +1325,330 @@ function drawEraserCursor() {
     getEraserRadius() * 2
   );
 }
+
+// ==================================================
+// TEMPORARY CREATOR — START
+// Drawing interface, local erasing, saving and export.
+// Remove this section after the initial collection
+// has been created and exported.
+// ==================================================
+
+function drawCreator() {
+  drawCreatorHeader();
+
+  noStroke();
+  fill(PAPER);
+  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
+
+  noFill();
+  stroke(BORDER);
+  strokeWeight(1.2);
+  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
+
+  for (const strokeData of creatorStrokes) {
+    drawStroke(strokeData);
+  }
+
+  if (creatorCurrentStroke) {
+    drawStroke(creatorCurrentStroke);
+  }
+
+  if (creatorEraserMode) {
+    drawEraserCursor();
+  }
+
+  if (
+    creatorStrokes.length === 0 &&
+    !creatorCurrentStroke
+  ) {
+    noStroke();
+    fill(MUTED);
+    textAlign(CENTER, CENTER);
+    textSize(14);
+    text(
+      "Draw your starting artwork here.",
+      canvasArea.x,
+      canvasArea.y
+    );
+  }
+
+  drawSharedToolControls();
+  drawCreatorFooter();
+}
+
+function drawCreatorHeader() {
+  noStroke();
+  fill(WHITE);
+  textAlign(LEFT, TOP);
+  textSize(22);
+  text("create artwork", 20, 18);
+
+  fill(MUTED);
+  textSize(12);
+  text("Temporary starting collection tool", 21, 49);
+
+  drawSmallTextButton(creatorBackButton, "BACK TO MODES");
+
+  textAlign(LEFT, TOP);
+  fill(MUTED);
+  textSize(11);
+
+  const savedCount = getCreatorSavedCount();
+
+  text(
+    "ARTWORKS SAVED: " + savedCount,
+    21,
+    83
+  );
+}
+
+function drawCreatorFooter() {
+  drawButton(creatorSaveButton, "SAVE & EXPORT");
+
+  push();
+
+  rectMode(CORNER);
+  stroke(BORDER);
+  strokeWeight(1);
+  fill(PAPER);
+
+  rect(
+    creatorClearButton.x,
+    creatorClearButton.y,
+    creatorClearButton.w,
+    creatorClearButton.h,
+    8
+  );
+
+  noStroke();
+  fill(WHITE);
+  textAlign(CENTER, CENTER);
+  textSize(12);
+
+  text(
+    "CLEAR",
+    creatorClearButton.x + creatorClearButton.w / 2,
+    creatorClearButton.y + creatorClearButton.h / 2
+  );
+
+  pop();
+
+  noStroke();
+  fill(MUTED);
+  textAlign(CENTER, TOP);
+  textSize(10);
+
+  text(
+    creatorStatus,
+    width / 2,
+    height - 25
+  );
+}
+
+function getCreatorSavedCount() {
+  if (
+    !window.shared ||
+    !window.shared.worldwide ||
+    !Array.isArray(window.shared.worldwide.artworks)
+  ) {
+    return 0;
+  }
+
+  return window.shared.worldwide.artworks.filter(
+    artwork =>
+      artwork &&
+      typeof artwork.id === "string" &&
+      artwork.id.startsWith("starting-artwork-")
+  ).length;
+}
+
+function eraseCreatorStrokesAt(x, y) {
+  if (!creatorEraserMode) return;
+
+  for (let i = creatorStrokes.length - 1; i >= 0; i--) {
+    if (strokeTouchesEraser(creatorStrokes[i], x, y)) {
+      creatorStrokes.splice(i, 1);
+    }
+  }
+
+  if (
+    creatorCurrentStroke &&
+    strokeTouchesEraser(creatorCurrentStroke, x, y)
+  ) {
+    creatorCurrentStroke = null;
+  }
+}
+
+function addCreatorDrawingPoint(x, y) {
+  if (!creatorCurrentStroke || !canvasArea) return;
+
+  const zoom = constrain(
+    Number(creatorToolSettings.zoomLevel) || MAX_ZOOM,
+    MIN_ZOOM,
+    MAX_ZOOM
+  );
+
+  const baseDiameter = canvasArea.baseDiameter;
+
+  const normalizedX =
+    (x - canvasArea.x) / (baseDiameter * zoom) + 0.5;
+
+  const normalizedY =
+    (y - canvasArea.y) / (baseDiameter * zoom) + 0.5;
+
+  creatorCurrentStroke.points.push({
+    x: normalizedX,
+    y: normalizedY
+  });
+}
+
+function clearCreatorArtwork() {
+  if (
+    creatorStrokes.length === 0 &&
+    !creatorCurrentStroke
+  ) {
+    creatorStatus = "The canvas is already empty.";
+    creatorStatusTime = millis();
+    return;
+  }
+
+  const shouldClear = confirm(
+    "Clear this artwork? This cannot be undone."
+  );
+
+  if (!shouldClear) return;
+
+  creatorStrokes = [];
+  creatorCurrentStroke = null;
+  creatorEraserMode = false;
+
+  creatorStatus = "Canvas cleared. Start a new artwork.";
+  creatorStatusTime = millis();
+}
+
+function saveCreatorArtwork() {
+  if (!window.shareConnected) {
+    creatorStatus = "Not connected yet. Wait for the connection.";
+    creatorStatusTime = millis();
+    return;
+  }
+
+  if (!ensureSharedStructure()) {
+    creatorStatus = "Shared data is not ready yet. Try again.";
+    creatorStatusTime = millis();
+    return;
+  }
+
+  if (
+    creatorCurrentStroke &&
+    creatorCurrentStroke.points.length > 0
+  ) {
+    creatorStrokes.push(creatorCurrentStroke);
+  }
+
+  creatorCurrentStroke = null;
+
+  if (creatorStrokes.length === 0) {
+    creatorStatus = "Draw something before saving.";
+    creatorStatusTime = millis();
+    return;
+  }
+
+  const worldwide = window.shared.worldwide;
+
+  if (!Array.isArray(worldwide.artworks)) {
+    worldwide.artworks = [];
+  }
+
+  const nextNumber = getCreatorSavedCount() + 1;
+  const artworkId = "starting-artwork-" + nextNumber;
+
+  const savedStrokes = JSON.parse(
+    JSON.stringify(creatorStrokes)
+  );
+
+  const artwork = {
+    id: artworkId,
+    title: "Starting Artwork " + nextNumber,
+    version: 1,
+    zoomLevel: Number(creatorToolSettings.zoomLevel) || MAX_ZOOM,
+    strokes: savedStrokes,
+    versions: [
+      {
+        version: 1,
+        zoomLevel: Number(creatorToolSettings.zoomLevel) || MAX_ZOOM,
+        strokes: JSON.parse(JSON.stringify(savedStrokes))
+      }
+    ],
+    createdAt: new Date().toISOString()
+  };
+
+  // Save into the existing Worldwide shared namespace.
+  worldwide.artworks.push(artwork);
+
+  // Export the same artwork as a separate JSON backup.
+  const exportData = {
+    format: "bubble-pop-artwork",
+    formatVersion: 1,
+    exportedAt: new Date().toISOString(),
+    artwork: artwork
+  };
+
+  const filename =
+    "bubble-pop-starting-artwork-" +
+    String(nextNumber).padStart(3, "0") +
+    ".json";
+
+  try {
+    downloadCreatorJSON(exportData, filename);
+
+    creatorStrokes = [];
+    creatorCurrentStroke = null;
+    creatorEraserMode = false;
+
+    creatorStatus =
+      "Saved! JSON file downloaded. Make your next artwork.";
+
+    creatorStatusTime = millis();
+
+    console.log("Worldwide artwork saved:", artwork);
+  } catch (error) {
+    console.error("Artwork export failed:", error);
+
+    creatorStatus =
+      "Saved to the room, but download failed. Check the browser.";
+
+    creatorStatusTime = millis();
+  }
+}
+
+function downloadCreatorJSON(data, filename) {
+  const json = JSON.stringify(data, null, 2);
+
+  const blob = new Blob(
+    [json],
+    { type: "application/json" }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+// ==================================================
+// TEMPORARY CREATOR — END
+// ==================================================
+
 
 // --------------------------------------------------
 // ORDINARY WAITING BUBBLES
@@ -2049,7 +2475,100 @@ function mousePressed() {
     ) {
       connectToShare();
       activeMode = "worldwide";
+      updateLayout();
       return;
+    }
+
+    // TEMPORARY CREATOR entry.
+    if (
+      creatorMenuButton &&
+      insideButton(mouseX, mouseY, creatorMenuButton)
+    ) {
+      connectToShare();
+
+      activeMode = "creator";
+
+      creatorStrokes = [];
+      creatorCurrentStroke = null;
+      creatorEraserMode = false;
+
+      creatorToolSettings = {
+        brushColor: "#FFFFFF",
+        brushSize: 4,
+        zoomLevel: MAX_ZOOM
+      };
+
+      creatorStatus = "Draw an artwork, then save and export it.";
+      creatorStatusTime = millis();
+
+      brushAdjustmentActive = false;
+      brushPermissionPending = false;
+
+      updateLayout();
+      return;
+    }
+
+    return;
+  }
+
+  // TEMPORARY CREATOR input.
+  if (activeMode === "creator") {
+    if (handleToolControlPress(mouseX, mouseY)) return;
+
+    if (
+      creatorBackButton &&
+      insideButton(mouseX, mouseY, creatorBackButton)
+    ) {
+      const hasUnsavedArtwork =
+        creatorStrokes.length > 0 ||
+        !!creatorCurrentStroke;
+
+      if (
+        hasUnsavedArtwork &&
+        !confirm("Leave Creator mode without saving this artwork?")
+      ) {
+        return;
+      }
+
+      activeMode = "menu";
+      creatorStrokes = [];
+      creatorCurrentStroke = null;
+      creatorEraserMode = false;
+      brushAdjustmentActive = false;
+      return;
+    }
+
+    if (
+      creatorSaveButton &&
+      insideButton(mouseX, mouseY, creatorSaveButton)
+    ) {
+      saveCreatorArtwork();
+      return;
+    }
+
+    if (
+      creatorClearButton &&
+      insideButton(mouseX, mouseY, creatorClearButton)
+    ) {
+      clearCreatorArtwork();
+      return;
+    }
+
+    if (insideDrawingCircle(mouseX, mouseY)) {
+      if (creatorEraserMode) {
+        eraseCreatorStrokesAt(mouseX, mouseY);
+        return;
+      }
+
+      const settings = creatorToolSettings;
+
+      creatorCurrentStroke = {
+        color: settings.brushColor || WHITE,
+        weight: settings.brushSize || 4,
+        points: []
+      };
+
+      addCreatorDrawingPoint(mouseX, mouseY);
     }
 
     return;
@@ -2148,6 +2667,22 @@ function mousePressed() {
 }
 
 function mouseDragged() {
+  // TEMPORARY CREATOR drawing input.
+  if (activeMode === "creator") {
+    if (!insideDrawingCircle(mouseX, mouseY)) return;
+
+    if (creatorEraserMode) {
+      eraseCreatorStrokesAt(mouseX, mouseY);
+      return;
+    }
+
+    if (creatorCurrentStroke) {
+      addCreatorDrawingPoint(mouseX, mouseY);
+    }
+
+    return;
+  }
+
   if (
     activeMode !== "group" ||
     !drawingMode ||
@@ -2169,6 +2704,19 @@ function mouseDragged() {
 }
 
 function mouseReleased() {
+  // TEMPORARY CREATOR stroke completion.
+  if (activeMode === "creator") {
+    if (
+      creatorCurrentStroke &&
+      creatorCurrentStroke.points.length > 0
+    ) {
+      creatorStrokes.push(creatorCurrentStroke);
+    }
+
+    creatorCurrentStroke = null;
+    return;
+  }
+
   if (currentStroke) {
     if (currentStroke.points.length > 0) {
       localStrokes.push(currentStroke);
