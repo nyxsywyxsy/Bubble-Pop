@@ -1,8 +1,22 @@
 
 /*
   BUBBLE POP — TWO-MODE APPLICATION
-  GROUP: shared collaborative drawing.
-  WORLDWIDE: working placeholder for the randomized-media mode.
+  BUILD VERSION: 0.2 — ZOOM CORRECTION
+
+  CURRENT PROJECT STATUS:
+  - GROUP: shared collaborative drawing and turn-taking.
+  - WORLDWIDE: working placeholder for randomized-media mode.
+  - COLOURS: palette and colour selection working.
+  - BRUSH SIZE: slider and tilt controls working.
+  - ZOOM: drawing zooms inside a fixed circular bubble.
+
+  IMPORTANT:
+  The bubble outline must remain stationary.
+  Zoom changes the drawing inside the bubble, not the bubble itself.
+
+  NEXT DEVELOPMENT:
+  Continue building Group version history and Worldwide
+  randomized media without changing the working colour or tilt features.
 
   Uses the existing p5-phone Share room:
   host: p5-phone-share.npuckett.workers.dev
@@ -65,7 +79,9 @@ const DRAWING_PALETTE = [
 
 const MIN_BRUSH_SIZE = 2;
 const MAX_BRUSH_SIZE = 16;
-const MIN_ZOOM = 1;
+
+// Zoom now goes below 1 so participants can zoom OUT.
+const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2.5;
 const ZOOM_STEP = 0.25;
 
@@ -412,28 +428,22 @@ function drawSmallTextButton(button, label) {
 // --------------------------------------------------
 
 function updateLayout() {
-  const settings = getActiveToolSettings();
   const areaTop = 125;
   const areaBottom = height - 245;
   const availableHeight = max(180, areaBottom - areaTop);
+
+  // The bubble size is now fixed and does not depend on zoom.
+  // Zoom only changes the drawing rendered inside this boundary.
   const baseDiameter = max(
     180,
     min(width - 72, availableHeight * 0.88)
   );
 
-  const zoom = constrain(
-    Number(settings.zoomLevel) || 1,
-    MIN_ZOOM,
-    MAX_ZOOM
-  );
-
-  const diameter = baseDiameter * zoom;
-
   canvasArea = {
     x: width / 2,
     y: (areaTop + areaBottom) / 2,
-    radius: diameter / 2,
-    diameter,
+    radius: baseDiameter / 2,
+    diameter: baseDiameter,
     baseDiameter
   };
 
@@ -617,10 +627,18 @@ function drawStroke(strokeData) {
   }
 
   const points = strokeData.points;
-  const zoom = getActiveToolSettings().zoomLevel || 1;
+
+  // Zoom affects only the drawing's scale inside the fixed bubble.
+  const zoom = constrain(
+    Number(getActiveToolSettings().zoomLevel) || 1,
+    MIN_ZOOM,
+    MAX_ZOOM
+  );
 
   push();
   drawingContext.save();
+
+  // Keep all drawing content clipped to the stationary circle.
   drawingContext.beginPath();
   drawingContext.arc(
     canvasArea.x,
@@ -856,19 +874,21 @@ function handleToolControlPress(x, y) {
     return true;
   }
 
+  // Zoom out: show more of the drawing inside the same circle.
   if (insideButton(x, y, zoomOutButton)) {
     settings.zoomLevel = max(
       MIN_ZOOM,
-      (settings.zoomLevel || 1) - ZOOM_STEP
+      (Number(settings.zoomLevel) || 1) - ZOOM_STEP
     );
 
     return true;
   }
 
+  // Zoom in: enlarge the drawing inside the same circle.
   if (insideButton(x, y, zoomInButton)) {
     settings.zoomLevel = min(
       MAX_ZOOM,
-      (settings.zoomLevel || 1) + ZOOM_STEP
+      (Number(settings.zoomLevel) || 1) + ZOOM_STEP
     );
 
     return true;
@@ -1317,20 +1337,23 @@ function insideButton(x, y, button) {
 function addDrawingPoint(x, y) {
   if (!currentStroke || !canvasArea) return;
 
-  const zoom = getActiveToolSettings().zoomLevel || 1;
+  const zoom = constrain(
+    Number(getActiveToolSettings().zoomLevel) || 1,
+    MIN_ZOOM,
+    MAX_ZOOM
+  );
+
   const baseDiameter = canvasArea.baseDiameter;
 
-  const normalizedX = constrain(
-    (x - canvasArea.x) / (baseDiameter * zoom) + 0.5,
-    0,
-    1
-  );
+  // Do not constrain these coordinates to 0–1.
+  // When zoomed out, the visible drawing area represents a larger
+  // section of the drawing space, so points outside the original
+  // 0–1 range must be retained rather than cut off.
+  const normalizedX =
+    (x - canvasArea.x) / (baseDiameter * zoom) + 0.5;
 
-  const normalizedY = constrain(
-    (y - canvasArea.y) / (baseDiameter * zoom) + 0.5,
-    0,
-    1
-  );
+  const normalizedY =
+    (y - canvasArea.y) / (baseDiameter * zoom) + 0.5;
 
   currentStroke.points.push({
     x: normalizedX,
