@@ -1,30 +1,24 @@
+
 /*
-  BUBBLE POP — TWO-MODE APPLICATION
-  BUILD VERSION: 0.7 — TEMPORARY ARTWORK CREATOR
+  BUBBLE POP
+  BUILD 0.8 — WORLDWIDE MODE
 
   GROUP:
-  - Shared collaborative drawing and turn-taking.
-  - Completed drawings are saved as numbered snapshots.
-  - Snapshots appear as floating version bubbles.
-  - Each version bubble contains a miniature of its drawing.
-  - Tap to expand a local preview; shake to pop it.
-
-  DRAWING:
-  - Shared colour palette and brush-size settings.
-  - Tilt controls brush size.
-  - Zoom can only be changed during your turn.
-  - Eraser removes only your own unsaved strokes.
+  Shared drawing, turns, version bubbles and previews.
 
   WORLDWIDE:
-  - Placeholder for future randomized-media mode.
+  Random artwork discovery, written prompts,
+  anonymous contributions and artwork history.
 
-  TEMPORARY CREATOR:
-  - Draw initial Worldwide artworks.
-  - Save each artwork to shared.worldwide.artworks.
-  - Download a JSON backup of each artwork.
-  - Remove the TEMPORARY CREATOR sections after
-    the starting artwork collection is complete.
+  Starting artworks are loaded from the shared room
+  or the five JSON backups in the repository.
+
+  Temporary artwork creator removed.
 */
+
+// ==================================================
+// SHARE CONNECTION
+// ==================================================
 
 const SHARE_HOST = "https://p5-phone-share.npuckett.workers.dev";
 const SHARE_ROOM = "a1-glade";
@@ -55,15 +49,16 @@ const INITIAL_SHARED_STATE = {
   }
 };
 
-// --------------------------------------------------
+// ==================================================
 // VISUAL SETTINGS
-// --------------------------------------------------
+// ==================================================
 
 const BACKGROUND = "#000000";
 const PAPER = "#101010";
 const WHITE = "#FFFFFF";
 const MUTED = "#B5B5B5";
 const BORDER = "#555555";
+
 const WAITING_BUBBLE_COUNT = 24;
 
 const DRAWING_PALETTE = [
@@ -95,9 +90,9 @@ const VERSION_PREVIEW_POP_TIME = 550;
 const VERSION_PREVIEW_SHAKE_COOLDOWN = 850;
 const VERSION_SHAKE_THRESHOLD = 40;
 
-// --------------------------------------------------
-// LOCAL APPLICATION STATE
-// --------------------------------------------------
+// ==================================================
+// LOCAL STATE
+// ==================================================
 
 let activeMode = "menu";
 let drawingMode = false;
@@ -112,7 +107,6 @@ let rightButton = null;
 let modeButton = null;
 let groupMenuButton = null;
 let worldwideMenuButton = null;
-let creatorMenuButton = null;
 let worldwideBackButton = null;
 
 let waitingBubbles = [];
@@ -137,37 +131,69 @@ let brushPermissionPending = false;
 let tiltBaseline = 0;
 
 // ==================================================
-// TEMPORARY CREATOR — START
-// Used only to make the initial Worldwide artworks.
-// Remove this entire section after the collection
-// has been created and exported.
+// WORLDWIDE STATE
 // ==================================================
 
-let creatorStrokes = [];
-let creatorCurrentStroke = null;
-let creatorEraserMode = false;
+const DEFAULT_PROMPTS = [
+  "Draw something that makes you happy.",
+  "Draw a place that exists only in your imagination.",
+  "Turn a simple shape into something unexpected.",
+  "Leave a small drawing for a stranger.",
+  "Draw something you noticed today."
+];
 
-let creatorBackButton = null;
-let creatorSaveButton = null;
-let creatorClearButton = null;
+const STARTING_ARTWORK_FILES = [
+  "bubble-pop-starting-artwork-001.json",
+  "bubble-pop-starting-artwork-002.json",
+  "bubble-pop-starting-artwork-003.json",
+  "bubble-pop-starting-artwork-004.json",
+  "bubble-pop-starting-artwork-005.json"
+];
 
-let creatorStatus = "Draw an artwork, then save and export it.";
-let creatorStatusTime = 0;
+let worldwideLocalColor = WHITE;
+let worldwideLocalSize = 4;
 
-let creatorToolSettings = {
-  brushColor: "#FFFFFF",
-  brushSize: 4,
-  zoomLevel: MAX_ZOOM
+const worldwideTools = {
+  zoomLevel: MAX_ZOOM,
+
+  get brushColor() {
+    return getWorldwideState()?.brushColor || worldwideLocalColor;
+  },
+
+  set brushColor(value) {
+    worldwideLocalColor = value;
+    const w = getWorldwideState();
+    if (w) w.brushColor = value;
+  },
+
+  get brushSize() {
+    return getWorldwideState()?.brushSize || worldwideLocalSize;
+  },
+
+  set brushSize(value) {
+    worldwideLocalSize = value;
+    const w = getWorldwideState();
+    if (w) w.brushSize = value;
+  }
 };
 
-// ==================================================
-// TEMPORARY CREATOR — END
-// ==================================================
+let worldwidePage = "loading";
+let worldwideSelected = null;
+let worldwidePrompt = "";
+let worldwideBase = null;
+let worldwideBubbles = [];
+let worldwideVisited = new Set();
+let worldwideMessage = "";
+let worldwidePromptButton = null;
 
+let worldwideSeedPending = null;
+let worldwideSeedsLoaded = false;
+let worldwideLastBubbleRefresh = 0;
+let worldwideMediaKey = "";
 
-// --------------------------------------------------
-// SETUP AND SHARE CONNECTION
-// --------------------------------------------------
+// ==================================================
+// SETUP
+// ==================================================
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -207,13 +233,16 @@ function connectToShare() {
   }
 }
 
-// --------------------------------------------------
-// SHARED STATE AND LEGACY MIGRATION
-// --------------------------------------------------
+// ==================================================
+// SHARED STATE
+// ==================================================
 
 function ensureSharedStructure() {
   const room = window.shared;
-  if (!room || typeof room !== "object") return false;
+
+  if (!room || typeof room !== "object") {
+    return false;
+  }
 
   const legacyStrokes = Array.isArray(room.strokes)
     ? room.strokes
@@ -235,7 +264,8 @@ function ensureSharedStructure() {
   const group = room.group;
 
   const groupHasData =
-    (Array.isArray(group.strokes) && group.strokes.length > 0) ||
+    (Array.isArray(group.strokes) &&
+      group.strokes.length > 0) ||
     (Number(group.version) || 0) > 0 ||
     (Number(group.turnCount) || 0) > 0;
 
@@ -244,7 +274,6 @@ function ensureSharedStructure() {
     group.version = legacyVersion;
     group.turnCount = legacyTurnCount;
     group.lastAction = legacyLastAction;
-    console.log("Existing drawing migrated into Group.");
   }
 
   if (!Array.isArray(group.strokes)) group.strokes = [];
@@ -254,11 +283,19 @@ function ensureSharedStructure() {
   if (typeof group.turnCount !== "number") group.turnCount = 0;
 
   if (!group.lastAction) group.lastAction = "created";
-  if (!group.brushColor) group.brushColor = "#FFFFFF";
+  if (!group.brushColor) group.brushColor = WHITE;
 
-  if (typeof group.brushSize !== "number") group.brushSize = 4;
-  if (typeof group.bubblePopCount !== "number") group.bubblePopCount = 0;
-  if (typeof group.sessionActive !== "boolean") group.sessionActive = true;
+  if (typeof group.brushSize !== "number") {
+    group.brushSize = 4;
+  }
+
+  if (typeof group.bubblePopCount !== "number") {
+    group.bubblePopCount = 0;
+  }
+
+  if (typeof group.sessionActive !== "boolean") {
+    group.sessionActive = true;
+  }
 
   if (group.zoomSetupVersion !== ZOOM_SETUP_VERSION) {
     group.zoomLevel = MAX_ZOOM;
@@ -269,7 +306,11 @@ function ensureSharedStructure() {
     group.zoomLevel = MAX_ZOOM;
   }
 
-  group.zoomLevel = constrain(group.zoomLevel, MIN_ZOOM, MAX_ZOOM);
+  group.zoomLevel = constrain(
+    group.zoomLevel,
+    MIN_ZOOM,
+    MAX_ZOOM
+  );
 
   if (!room.worldwide || typeof room.worldwide !== "object") {
     room.worldwide = {};
@@ -277,11 +318,22 @@ function ensureSharedStructure() {
 
   const worldwide = room.worldwide;
 
-  if (!Array.isArray(worldwide.artworks)) worldwide.artworks = [];
-  if (!Array.isArray(worldwide.prompts)) worldwide.prompts = [];
-  if (!worldwide.brushColor) worldwide.brushColor = "#FFFFFF";
+  if (!Array.isArray(worldwide.artworks)) {
+    worldwide.artworks = [];
+  }
 
-  if (typeof worldwide.brushSize !== "number") worldwide.brushSize = 4;
+  if (!Array.isArray(worldwide.prompts)) {
+    worldwide.prompts = [];
+  }
+
+  if (!worldwide.brushColor) {
+    worldwide.brushColor = WHITE;
+  }
+
+  if (typeof worldwide.brushSize !== "number") {
+    worldwide.brushSize = 4;
+  }
+
   if (typeof worldwide.bubblePopCount !== "number") {
     worldwide.bubblePopCount = 0;
   }
@@ -311,29 +363,25 @@ function ensureSharedStructure() {
 }
 
 const fallbackToolSettings = {
-  brushColor: "#FFFFFF",
+  brushColor: WHITE,
   brushSize: 4,
   zoomLevel: MAX_ZOOM
 };
 
 function getActiveToolSettings() {
-  // TEMPORARY CREATOR integration.
-  if (activeMode === "creator") {
-    return creatorToolSettings;
+  if (activeMode === "worldwide") {
+    return worldwideTools;
   }
 
-  if (!window.shared) return fallbackToolSettings;
-
-  const key = activeMode === "worldwide" ? "worldwide" : "group";
-
-  if (!window.shared[key]) return fallbackToolSettings;
-
-  return window.shared[key];
+  return window.shared?.group || fallbackToolSettings;
 }
 
 function getGroupState() {
-  if (!window.shared || !window.shared.group) return null;
-  return window.shared.group;
+  return window.shared?.group || null;
+}
+
+function getWorldwideState() {
+  return window.shared?.worldwide || null;
 }
 
 function getSharedData() {
@@ -341,17 +389,27 @@ function getSharedData() {
   const group = room.group || room;
 
   return {
-    strokes: Array.isArray(group.strokes) ? group.strokes : [],
+    strokes: Array.isArray(group.strokes)
+      ? group.strokes
+      : [],
+
     version: Number(group.version) || 0,
     turnCount: Number(group.turnCount) || 0,
     lastAction: group.lastAction || "created",
-    versions: Array.isArray(group.versions) ? group.versions : []
+
+    versions: Array.isArray(group.versions)
+      ? group.versions
+      : []
   };
 }
 
-// --------------------------------------------------
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+// ==================================================
 // MAIN DRAW LOOP
-// --------------------------------------------------
+// ==================================================
 
 function draw() {
   background(BACKGROUND);
@@ -370,14 +428,7 @@ function draw() {
   updateLayout();
 
   if (activeMode === "worldwide") {
-    drawWorldwidePlaceholder();
-    drawSharedToolControls();
-    return;
-  }
-
-  // TEMPORARY CREATOR mode.
-  if (activeMode === "creator") {
-    drawCreator();
+    drawWorldwide();
     return;
   }
 
@@ -404,14 +455,13 @@ function draw() {
 
     drawSharedToolControls();
     drawFooter();
-
     drawVersionPreview();
   }
 }
 
-// --------------------------------------------------
-// MODE SELECTION
-// --------------------------------------------------
+// ==================================================
+// MAIN MENU
+// ==================================================
 
 function drawModeSelection() {
   const buttonWidth = min(width - 48, 360);
@@ -419,8 +469,10 @@ function drawModeSelection() {
   const gap = 13;
 
   const x = (width - buttonWidth) / 2;
-  const totalHeight = buttonHeight * 3 + gap * 2;
-  const startY = height / 2 - totalHeight / 2 + 30;
+  const totalHeight = buttonHeight * 2 + gap;
+
+  const startY =
+    height / 2 - totalHeight / 2 + 30;
 
   groupMenuButton = {
     x,
@@ -436,23 +488,21 @@ function drawModeSelection() {
     h: buttonHeight
   };
 
-  // TEMPORARY CREATOR menu button.
-  creatorMenuButton = {
-    x,
-    y: startY + (buttonHeight + gap) * 2,
-    w: buttonWidth,
-    h: buttonHeight
-  };
-
   noStroke();
   fill(WHITE);
   textAlign(CENTER, CENTER);
   textSize(min(40, width * 0.1));
+
   text("bubble pop", width / 2, startY - 85);
 
   fill(MUTED);
   textSize(14);
-  text("Choose your experience", width / 2, startY - 50);
+
+  text(
+    "Choose your experience",
+    width / 2,
+    startY - 50
+  );
 
   drawMenuCard(
     groupMenuButton,
@@ -466,19 +516,14 @@ function drawModeSelection() {
     "Discover drawings and prompts left by others."
   );
 
-  // TEMPORARY CREATOR menu card.
-  drawMenuCard(
-    creatorMenuButton,
-    "CREATE STARTING ARTWORK",
-    "Temporary tool for making the first collection."
-  );
-
   fill(MUTED);
   textSize(11);
   textAlign(CENTER, CENTER);
 
   text(
-    window.shareConnected ? "CONNECTED" : "TAP A MODE TO JOIN",
+    window.shareConnected
+      ? "CONNECTED"
+      : "TAP A MODE TO JOIN",
     width / 2,
     height - 20
   );
@@ -491,16 +536,23 @@ function drawMenuCard(button, heading, description) {
   stroke(110, 110, 110, 180);
   strokeWeight(1);
   fill(16, 16, 16);
+
   rect(button.x, button.y, button.w, button.h, 14);
 
   noStroke();
   fill(WHITE);
   textAlign(CENTER, CENTER);
   textSize(16);
-  text(heading, button.x + button.w / 2, button.y + 25);
+
+  text(
+    heading,
+    button.x + button.w / 2,
+    button.y + 25
+  );
 
   fill(MUTED);
   textSize(11);
+
   text(
     description,
     button.x + button.w / 2,
@@ -510,67 +562,9 @@ function drawMenuCard(button, heading, description) {
   pop();
 }
 
-function drawWorldwidePlaceholder() {
-  noStroke();
-  fill(PAPER);
-  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
-
-  noFill();
-  stroke(BORDER);
-  strokeWeight(1.2);
-  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
-
-  noStroke();
-  fill(WHITE);
-  textAlign(CENTER, CENTER);
-  textSize(27);
-  text("WORLDWIDE", width / 2, canvasArea.y - 42);
-
-  fill(MUTED);
-  textSize(13);
-  text(
-    "Randomized drawings and prompts will appear here.",
-    width / 2,
-    canvasArea.y + 4,
-    width - 70,
-    60
-  );
-
-  worldwideBackButton = {
-    x: width - 142,
-    y: 22,
-    w: 122,
-    h: 34
-  };
-
-  drawSmallTextButton(worldwideBackButton, "BACK TO MODES");
-}
-
-function drawSmallTextButton(button, label) {
-  push();
-
-  rectMode(CORNER);
-  stroke(BORDER);
-  strokeWeight(1);
-  fill(PAPER);
-  rect(button.x, button.y, button.w, button.h, 8);
-
-  noStroke();
-  fill(WHITE);
-  textAlign(CENTER, CENTER);
-  textSize(11);
-  text(
-    label,
-    button.x + button.w / 2,
-    button.y + button.h / 2
-  );
-
-  pop();
-}
-
-// --------------------------------------------------
+// ==================================================
 // LAYOUT
-// --------------------------------------------------
+// ==================================================
 
 function updateLayout() {
   const areaTop = 125;
@@ -616,6 +610,10 @@ function updateLayout() {
     h: 25
   };
 
+  worldwideBackButton = {
+    ...modeButton
+  };
+
   paletteButtons = [];
 
   const swatchSize = min(27, (width - 66) / 10);
@@ -625,8 +623,12 @@ function updateLayout() {
     min(8, (width - 66 - swatchSize * 8) / 7)
   );
 
-  const paletteWidth = swatchSize * 8 + swatchGap * 7;
-  const paletteStartX = (width - paletteWidth) / 2;
+  const paletteWidth =
+    swatchSize * 8 + swatchGap * 7;
+
+  const paletteStartX =
+    (width - paletteWidth) / 2;
+
   const paletteY = height - 215;
 
   for (let i = 0; i < DRAWING_PALETTE.length; i++) {
@@ -673,32 +675,60 @@ function updateLayout() {
     h: 32
   };
 
-  // TEMPORARY CREATOR buttons.
-  creatorBackButton = {
-    x: width - 142,
-    y: 22,
-    w: 122,
-    h: 34
-  };
-
-  creatorSaveButton = {
-    x: 18,
-    y: height - 84,
-    w: (width - 46) * 0.65,
-    h: 50
-  };
-
-  creatorClearButton = {
-    x: creatorSaveButton.x + creatorSaveButton.w + 10,
-    y: height - 84,
-    w: width - (creatorSaveButton.x + creatorSaveButton.w + 28),
-    h: 50
+  worldwidePromptButton = {
+    x: width / 2 - 80,
+    y: height - 145,
+    w: 160,
+    h: 33
   };
 }
 
-// --------------------------------------------------
-// GROUP HEADER AND CANVAS
-// --------------------------------------------------
+function drawSmallTextButton(button, label) {
+  push();
+
+  rectMode(CORNER);
+  stroke(BORDER);
+  strokeWeight(1);
+  fill(PAPER);
+
+  rect(button.x, button.y, button.w, button.h, 8);
+
+  noStroke();
+  fill(WHITE);
+  textAlign(CENTER, CENTER);
+  textSize(11);
+
+  text(
+    label,
+    button.x + button.w / 2,
+    button.y + button.h / 2
+  );
+
+  pop();
+}
+
+function drawButton(button, label) {
+  noStroke();
+
+  fill(window.shareConnected ? WHITE : "#555555");
+
+  rect(button.x, button.y, button.w, button.h, 8);
+
+  fill(window.shareConnected ? BACKGROUND : WHITE);
+
+  textAlign(CENTER, CENTER);
+  textSize(13);
+
+  text(
+    label,
+    button.x + button.w / 2,
+    button.y + button.h / 2
+  );
+}
+
+// ==================================================
+// GROUP HEADER
+// ==================================================
 
 function drawHeader() {
   const data = getSharedData();
@@ -707,70 +737,96 @@ function drawHeader() {
   fill(WHITE);
   textAlign(LEFT, TOP);
   textSize(25);
+
   text("bubble pop", 20, 18);
 
   fill(MUTED);
   textSize(13);
+
   text("A drawing passed between people.", 21, 53);
 
   textAlign(RIGHT, TOP);
   textSize(12);
+
   fill(window.shareConnected ? WHITE : MUTED);
 
   text(
-    window.shareConnected ? "CONNECTED" : "CONNECTING...",
+    window.shareConnected
+      ? "CONNECTED"
+      : "CONNECTING...",
     width - 20,
     25
   );
 
   if (!drawingMode) {
-    noFill();
-    stroke(BORDER);
-    strokeWeight(1);
-    rect(modeButton.x, modeButton.y, modeButton.w, modeButton.h, 6);
-
-    noStroke();
-    fill(MUTED);
-    textAlign(CENTER, CENTER);
-    textSize(10);
-    text(
-      "MODES",
-      modeButton.x + modeButton.w / 2,
-      modeButton.y + modeButton.h / 2
-    );
+    drawSmallTextButton(modeButton, "MODES");
   }
 
   textAlign(LEFT, TOP);
   fill(MUTED);
   textSize(13);
+
   text(
-    "Version " + data.version + "   ·   " + data.turnCount + " turns",
+    "Version " + data.version +
+      " · " + data.turnCount + " turns",
     21,
     88
   );
+
+  textSize(11);
+
+  text(
+    "Bubbles popped: " +
+      (getGroupState()?.bubblePopCount || 0),
+    21,
+    105
+  );
 }
 
-function drawCanvasCircle() {
+// ==================================================
+// DRAWING CANVAS
+// ==================================================
+
+function drawCircleBackground() {
   push();
 
   noStroke();
   fill(PAPER);
-  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
+
+  circle(
+    canvasArea.x,
+    canvasArea.y,
+    canvasArea.diameter
+  );
 
   noFill();
   stroke(BORDER);
   strokeWeight(1.2);
-  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
+
+  circle(
+    canvasArea.x,
+    canvasArea.y,
+    canvasArea.diameter
+  );
 
   pop();
+}
+
+function drawCanvasCircle() {
+  drawCircleBackground();
 
   const data = getSharedData();
 
-  if (data.strokes.length === 0 && localStrokes.length === 0) {
+  if (
+    data.strokes.length === 0 &&
+    localStrokes.length === 0 &&
+    !currentStroke
+  ) {
     noStroke();
     fill(MUTED);
     textAlign(CENTER, CENTER);
     textSize(15);
+
     text(
       "A drawing will begin here.",
       canvasArea.x,
@@ -823,6 +879,7 @@ function drawStroke(strokeData, zoomOverride, targetArea) {
   drawingContext.save();
 
   drawingContext.beginPath();
+
   drawingContext.arc(
     area.x,
     area.y,
@@ -830,6 +887,7 @@ function drawStroke(strokeData, zoomOverride, targetArea) {
     0,
     Math.PI * 2
   );
+
   drawingContext.clip();
 
   stroke(strokeData.color || WHITE);
@@ -841,14 +899,17 @@ function drawStroke(strokeData, zoomOverride, targetArea) {
   if (points.length === 1) {
     const px =
       area.x +
-      (points[0].x - 0.5) * area.baseDiameter * zoom;
+      (points[0].x - 0.5) *
+      area.baseDiameter * zoom;
 
     const py =
       area.y +
-      (points[0].y - 0.5) * area.baseDiameter * zoom;
+      (points[0].y - 0.5) *
+      area.baseDiameter * zoom;
 
     noStroke();
     fill(strokeData.color || WHITE);
+
     circle(px, py, strokeData.weight || 4);
   } else {
     beginShape();
@@ -856,11 +917,13 @@ function drawStroke(strokeData, zoomOverride, targetArea) {
     for (const point of points) {
       const px =
         area.x +
-        (point.x - 0.5) * area.baseDiameter * zoom;
+        (point.x - 0.5) *
+        area.baseDiameter * zoom;
 
       const py =
         area.y +
-        (point.y - 0.5) * area.baseDiameter * zoom;
+        (point.y - 0.5) *
+        area.baseDiameter * zoom;
 
       vertex(px, py);
     }
@@ -872,9 +935,9 @@ function drawStroke(strokeData, zoomOverride, targetArea) {
   pop();
 }
 
-// --------------------------------------------------
-// SHARED DRAWING TOOLS
-// --------------------------------------------------
+// ==================================================
+// DRAWING TOOLS
+// ==================================================
 
 function drawSharedToolControls() {
   const settings = getActiveToolSettings();
@@ -891,6 +954,7 @@ function drawSharedToolControls() {
       noFill();
       stroke(WHITE);
       strokeWeight(2);
+
       circle(
         button.x + button.w / 2,
         button.y + button.h / 2,
@@ -901,6 +965,7 @@ function drawSharedToolControls() {
     stroke(220, 220, 220, 100);
     strokeWeight(1);
     fill(DRAWING_PALETTE[i].color);
+
     circle(
       button.x + button.w / 2,
       button.y + button.h / 2,
@@ -913,9 +978,20 @@ function drawSharedToolControls() {
   push();
 
   rectMode(CORNER);
-  stroke(brushAdjustmentActive ? "#FFE66D" : BORDER);
+
+  stroke(
+    brushAdjustmentActive
+      ? "#FFE66D"
+      : BORDER
+  );
+
   strokeWeight(brushAdjustmentActive ? 2 : 1);
-  fill(brushAdjustmentActive ? "#29251A" : PAPER);
+
+  fill(
+    brushAdjustmentActive
+      ? "#29251A"
+      : PAPER
+  );
 
   rect(
     brushSizeButton.x,
@@ -929,6 +1005,7 @@ function drawSharedToolControls() {
   fill(WHITE);
   textAlign(CENTER, CENTER);
   textSize(10);
+
   text(
     brushAdjustmentActive
       ? "TILT LEFT / RIGHT TO CHANGE SIZE"
@@ -948,6 +1025,7 @@ function drawSharedToolControls() {
 
   noStroke();
   fill("#444444");
+
   rect(
     brushSizeTrack.x,
     brushSizeTrack.y,
@@ -956,7 +1034,12 @@ function drawSharedToolControls() {
     4
   );
 
-  fill(brushAdjustmentActive ? "#FFE66D" : WHITE);
+  fill(
+    brushAdjustmentActive
+      ? "#FFE66D"
+      : WHITE
+  );
+
   rect(
     brushSizeTrack.x,
     brushSizeTrack.y,
@@ -974,34 +1057,32 @@ function drawSharedToolControls() {
   fill(MUTED);
   textAlign(LEFT, CENTER);
   textSize(10);
+
   text(
     "SIZE " + Math.round(settings.brushSize),
     brushSizeTrack.x,
     brushSizeTrack.y + 17
   );
 
-  // Group eraser is available only during a Group turn.
-  // Creator eraser is temporary and only affects its own drawing.
-  if (
-    (activeMode === "group" && drawingMode) ||
-    activeMode === "creator"
-  ) {
+  if (drawingMode) {
     drawEraserButton();
   }
 
-  const zoomAllowed =
-    activeMode !== "group" || drawingMode;
+  const zoomAllowed = drawingMode;
 
   drawZoomButton(zoomOutButton, "−", zoomAllowed);
   drawZoomButton(zoomInButton, "+", zoomAllowed);
 
   fill(zoomAllowed ? MUTED : "#666666");
+
   textAlign(CENTER, CENTER);
   textSize(10);
 
   text(
     zoomAllowed
-      ? Math.round((settings.zoomLevel || MAX_ZOOM) * 100) + "%"
+      ? Math.round(
+          (settings.zoomLevel || MAX_ZOOM) * 100
+        ) + "%"
       : "TURN ONLY",
     width - 63,
     height - 128
@@ -1009,17 +1090,13 @@ function drawSharedToolControls() {
 }
 
 function drawEraserButton() {
-  const isOn =
-    activeMode === "creator"
-      ? creatorEraserMode
-      : eraserMode;
-
   push();
 
   rectMode(CORNER);
-  stroke(isOn ? "#FFE66D" : BORDER);
-  strokeWeight(isOn ? 2 : 1);
-  fill(isOn ? "#29251A" : PAPER);
+
+  stroke(eraserMode ? "#FFE66D" : BORDER);
+  strokeWeight(eraserMode ? 2 : 1);
+  fill(eraserMode ? "#29251A" : PAPER);
 
   rect(
     eraserButton.x,
@@ -1030,11 +1107,12 @@ function drawEraserButton() {
   );
 
   noStroke();
-  fill(isOn ? "#FFE66D" : WHITE);
+  fill(eraserMode ? "#FFE66D" : WHITE);
   textAlign(CENTER, CENTER);
   textSize(11);
+
   text(
-    isOn ? "ON" : "ER",
+    eraserMode ? "ON" : "ER",
     eraserButton.x + eraserButton.w / 2,
     eraserButton.y + eraserButton.h / 2
   );
@@ -1049,12 +1127,15 @@ function drawZoomButton(button, label, enabled) {
   stroke(enabled ? BORDER : "#333333");
   strokeWeight(1);
   fill(enabled ? PAPER : "#080808");
+
   rect(button.x, button.y, button.w, button.h, 7);
 
   noStroke();
   fill(enabled ? WHITE : "#555555");
+
   textAlign(CENTER, CENTER);
   textSize(20);
+
   text(
     label,
     button.x + button.w / 2,
@@ -1104,55 +1185,36 @@ function handleToolControlPress(x, y) {
     );
 
     settings.brushSize = Math.round(
-      map(ratio, 0, 1, MIN_BRUSH_SIZE, MAX_BRUSH_SIZE)
+      map(
+        ratio,
+        0,
+        1,
+        MIN_BRUSH_SIZE,
+        MAX_BRUSH_SIZE
+      )
     );
 
     return true;
   }
 
   if (
-    activeMode === "group" &&
     drawingMode &&
     insideButton(x, y, eraserButton)
   ) {
-    if (currentStroke && currentStroke.points.length > 0) {
-      localStrokes.push(currentStroke);
-    }
+    mouseReleased();
 
-    currentStroke = null;
     eraserMode = !eraserMode;
     brushAdjustmentActive = false;
 
     return true;
   }
 
-  // TEMPORARY CREATOR eraser toggle.
-  if (
-    activeMode === "creator" &&
-    insideButton(x, y, eraserButton)
-  ) {
-    if (
-      creatorCurrentStroke &&
-      creatorCurrentStroke.points.length > 0
-    ) {
-      creatorStrokes.push(creatorCurrentStroke);
-    }
-
-    creatorCurrentStroke = null;
-    creatorEraserMode = !creatorEraserMode;
-    brushAdjustmentActive = false;
-
-    return true;
-  }
-
-  const zoomAllowed =
-    activeMode !== "group" || drawingMode;
-
   if (insideButton(x, y, zoomOutButton)) {
-    if (zoomAllowed) {
+    if (drawingMode) {
       settings.zoomLevel = max(
         MIN_ZOOM,
-        (Number(settings.zoomLevel) || MAX_ZOOM) - ZOOM_STEP
+        (Number(settings.zoomLevel) || MAX_ZOOM) -
+          ZOOM_STEP
       );
     }
 
@@ -1160,10 +1222,11 @@ function handleToolControlPress(x, y) {
   }
 
   if (insideButton(x, y, zoomInButton)) {
-    if (zoomAllowed) {
+    if (drawingMode) {
       settings.zoomLevel = min(
         MAX_ZOOM,
-        (Number(settings.zoomLevel) || MAX_ZOOM) + ZOOM_STEP
+        (Number(settings.zoomLevel) || MAX_ZOOM) +
+          ZOOM_STEP
       );
     }
 
@@ -1172,6 +1235,10 @@ function handleToolControlPress(x, y) {
 
   return false;
 }
+
+// ==================================================
+// TILT CONTROLS
+// ==================================================
 
 function updateBrushSizeFromTilt() {
   if (
@@ -1214,27 +1281,35 @@ function userSetupComplete() {
   }
 }
 
-// --------------------------------------------------
-// LOCAL ERASER
-// --------------------------------------------------
+// ==================================================
+// ERASER
+// ==================================================
 
 function getEraserRadius() {
   const settings = getActiveToolSettings();
-  return max(12, (Number(settings.brushSize) || 4) * 2.5);
+
+  return max(
+    12,
+    (Number(settings.brushSize) || 4) * 2.5
+  );
 }
 
 function getStrokeScreenPoint(point) {
   const zoom = constrain(
-    Number(getActiveToolSettings().zoomLevel) || MAX_ZOOM,
+    Number(getActiveToolSettings().zoomLevel) ||
+      MAX_ZOOM,
     MIN_ZOOM,
     MAX_ZOOM
   );
 
   return {
     x: canvasArea.x +
-      (point.x - 0.5) * canvasArea.baseDiameter * zoom,
+      (point.x - 0.5) *
+      canvasArea.baseDiameter * zoom,
+
     y: canvasArea.y +
-      (point.y - 0.5) * canvasArea.baseDiameter * zoom
+      (point.y - 0.5) *
+      canvasArea.baseDiameter * zoom
   };
 }
 
@@ -1248,34 +1323,40 @@ function distanceToSegment(px, py, ax, ay, bx, by) {
 
   const t = constrain(
     ((px - ax) * dx + (py - ay) * dy) /
-    (dx * dx + dy * dy),
+      (dx * dx + dy * dy),
     0,
     1
   );
 
-  const closestX = ax + t * dx;
-  const closestY = ay + t * dy;
-
-  return dist(px, py, closestX, closestY);
+  return dist(
+    px,
+    py,
+    ax + t * dx,
+    ay + t * dy
+  );
 }
 
 function strokeTouchesEraser(strokeData, x, y) {
   if (
     !strokeData ||
     !Array.isArray(strokeData.points) ||
-    strokeData.points.length === 0
+    !strokeData.points.length
   ) {
     return false;
   }
 
   const radius =
-    getEraserRadius() + (Number(strokeData.weight) || 4) / 2;
+    getEraserRadius() +
+    (Number(strokeData.weight) || 4) / 2;
 
   const points = strokeData.points;
 
   if (points.length === 1) {
     const point = getStrokeScreenPoint(points[0]);
-    return dist(x, y, point.x, point.y) <= radius;
+
+    return dist(
+      x, y, point.x, point.y
+    ) <= radius;
   }
 
   for (let i = 0; i < points.length - 1; i++) {
@@ -1319,6 +1400,7 @@ function drawEraserCursor() {
   noFill();
   stroke(255, 230, 109, 210);
   strokeWeight(1.5);
+
   circle(
     mouseX,
     mouseY,
@@ -1327,332 +1409,8 @@ function drawEraserCursor() {
 }
 
 // ==================================================
-// TEMPORARY CREATOR — START
-// Drawing interface, local erasing, saving and export.
-// Remove this section after the initial collection
-// has been created and exported.
+// ORDINARY EMPTY BUBBLES
 // ==================================================
-
-function drawCreator() {
-  drawCreatorHeader();
-
-  noStroke();
-  fill(PAPER);
-  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
-
-  noFill();
-  stroke(BORDER);
-  strokeWeight(1.2);
-  circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
-
-  for (const strokeData of creatorStrokes) {
-    drawStroke(strokeData);
-  }
-
-  if (creatorCurrentStroke) {
-    drawStroke(creatorCurrentStroke);
-  }
-
-  if (creatorEraserMode) {
-    drawEraserCursor();
-  }
-
-  if (
-    creatorStrokes.length === 0 &&
-    !creatorCurrentStroke
-  ) {
-    noStroke();
-    fill(MUTED);
-    textAlign(CENTER, CENTER);
-    textSize(14);
-    text(
-      "Draw your starting artwork here.",
-      canvasArea.x,
-      canvasArea.y
-    );
-  }
-
-  drawSharedToolControls();
-  drawCreatorFooter();
-}
-
-function drawCreatorHeader() {
-  noStroke();
-  fill(WHITE);
-  textAlign(LEFT, TOP);
-  textSize(22);
-  text("create artwork", 20, 18);
-
-  fill(MUTED);
-  textSize(12);
-  text("Temporary starting collection tool", 21, 49);
-
-  drawSmallTextButton(creatorBackButton, "BACK TO MODES");
-
-  textAlign(LEFT, TOP);
-  fill(MUTED);
-  textSize(11);
-
-  const savedCount = getCreatorSavedCount();
-
-  text(
-    "ARTWORKS SAVED: " + savedCount,
-    21,
-    83
-  );
-}
-
-function drawCreatorFooter() {
-  drawButton(creatorSaveButton, "SAVE & EXPORT");
-
-  push();
-
-  rectMode(CORNER);
-  stroke(BORDER);
-  strokeWeight(1);
-  fill(PAPER);
-
-  rect(
-    creatorClearButton.x,
-    creatorClearButton.y,
-    creatorClearButton.w,
-    creatorClearButton.h,
-    8
-  );
-
-  noStroke();
-  fill(WHITE);
-  textAlign(CENTER, CENTER);
-  textSize(12);
-
-  text(
-    "CLEAR",
-    creatorClearButton.x + creatorClearButton.w / 2,
-    creatorClearButton.y + creatorClearButton.h / 2
-  );
-
-  pop();
-
-  noStroke();
-  fill(MUTED);
-  textAlign(CENTER, TOP);
-  textSize(10);
-
-  text(
-    creatorStatus,
-    width / 2,
-    height - 25
-  );
-}
-
-function getCreatorSavedCount() {
-  if (
-    !window.shared ||
-    !window.shared.worldwide ||
-    !Array.isArray(window.shared.worldwide.artworks)
-  ) {
-    return 0;
-  }
-
-  return window.shared.worldwide.artworks.filter(
-    artwork =>
-      artwork &&
-      typeof artwork.id === "string" &&
-      artwork.id.startsWith("starting-artwork-")
-  ).length;
-}
-
-function eraseCreatorStrokesAt(x, y) {
-  if (!creatorEraserMode) return;
-
-  for (let i = creatorStrokes.length - 1; i >= 0; i--) {
-    if (strokeTouchesEraser(creatorStrokes[i], x, y)) {
-      creatorStrokes.splice(i, 1);
-    }
-  }
-
-  if (
-    creatorCurrentStroke &&
-    strokeTouchesEraser(creatorCurrentStroke, x, y)
-  ) {
-    creatorCurrentStroke = null;
-  }
-}
-
-function addCreatorDrawingPoint(x, y) {
-  if (!creatorCurrentStroke || !canvasArea) return;
-
-  const zoom = constrain(
-    Number(creatorToolSettings.zoomLevel) || MAX_ZOOM,
-    MIN_ZOOM,
-    MAX_ZOOM
-  );
-
-  const baseDiameter = canvasArea.baseDiameter;
-
-  const normalizedX =
-    (x - canvasArea.x) / (baseDiameter * zoom) + 0.5;
-
-  const normalizedY =
-    (y - canvasArea.y) / (baseDiameter * zoom) + 0.5;
-
-  creatorCurrentStroke.points.push({
-    x: normalizedX,
-    y: normalizedY
-  });
-}
-
-function clearCreatorArtwork() {
-  if (
-    creatorStrokes.length === 0 &&
-    !creatorCurrentStroke
-  ) {
-    creatorStatus = "The canvas is already empty.";
-    creatorStatusTime = millis();
-    return;
-  }
-
-  const shouldClear = confirm(
-    "Clear this artwork? This cannot be undone."
-  );
-
-  if (!shouldClear) return;
-
-  creatorStrokes = [];
-  creatorCurrentStroke = null;
-  creatorEraserMode = false;
-
-  creatorStatus = "Canvas cleared. Start a new artwork.";
-  creatorStatusTime = millis();
-}
-
-function saveCreatorArtwork() {
-  if (!window.shareConnected) {
-    creatorStatus = "Not connected yet. Wait for the connection.";
-    creatorStatusTime = millis();
-    return;
-  }
-
-  if (!ensureSharedStructure()) {
-    creatorStatus = "Shared data is not ready yet. Try again.";
-    creatorStatusTime = millis();
-    return;
-  }
-
-  if (
-    creatorCurrentStroke &&
-    creatorCurrentStroke.points.length > 0
-  ) {
-    creatorStrokes.push(creatorCurrentStroke);
-  }
-
-  creatorCurrentStroke = null;
-
-  if (creatorStrokes.length === 0) {
-    creatorStatus = "Draw something before saving.";
-    creatorStatusTime = millis();
-    return;
-  }
-
-  const worldwide = window.shared.worldwide;
-
-  if (!Array.isArray(worldwide.artworks)) {
-    worldwide.artworks = [];
-  }
-
-  const nextNumber = getCreatorSavedCount() + 1;
-  const artworkId = "starting-artwork-" + nextNumber;
-
-  const savedStrokes = JSON.parse(
-    JSON.stringify(creatorStrokes)
-  );
-
-  const artwork = {
-    id: artworkId,
-    title: "Starting Artwork " + nextNumber,
-    version: 1,
-    zoomLevel: Number(creatorToolSettings.zoomLevel) || MAX_ZOOM,
-    strokes: savedStrokes,
-    versions: [
-      {
-        version: 1,
-        zoomLevel: Number(creatorToolSettings.zoomLevel) || MAX_ZOOM,
-        strokes: JSON.parse(JSON.stringify(savedStrokes))
-      }
-    ],
-    createdAt: new Date().toISOString()
-  };
-
-  // Save into the existing Worldwide shared namespace.
-  worldwide.artworks.push(artwork);
-
-  // Export the same artwork as a separate JSON backup.
-  const exportData = {
-    format: "bubble-pop-artwork",
-    formatVersion: 1,
-    exportedAt: new Date().toISOString(),
-    artwork: artwork
-  };
-
-  const filename =
-    "bubble-pop-starting-artwork-" +
-    String(nextNumber).padStart(3, "0") +
-    ".json";
-
-  try {
-    downloadCreatorJSON(exportData, filename);
-
-    creatorStrokes = [];
-    creatorCurrentStroke = null;
-    creatorEraserMode = false;
-
-    creatorStatus =
-      "Saved! JSON file downloaded. Make your next artwork.";
-
-    creatorStatusTime = millis();
-
-    console.log("Worldwide artwork saved:", artwork);
-  } catch (error) {
-    console.error("Artwork export failed:", error);
-
-    creatorStatus =
-      "Saved to the room, but download failed. Check the browser.";
-
-    creatorStatusTime = millis();
-  }
-}
-
-function downloadCreatorJSON(data, filename) {
-  const json = JSON.stringify(data, null, 2);
-
-  const blob = new Blob(
-    [json],
-    { type: "application/json" }
-  );
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = filename;
-
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 1000);
-}
-
-// ==================================================
-// TEMPORARY CREATOR — END
-// ==================================================
-
-
-// --------------------------------------------------
-// ORDINARY WAITING BUBBLES
-// --------------------------------------------------
 
 function createWaitingBubbles() {
   waitingBubbles = [];
@@ -1670,13 +1428,20 @@ function makeWaitingBubble() {
   let found = false;
 
   for (let attempt = 0; attempt < 100; attempt++) {
-    x = random(18 + size / 2, width - 18 - size / 2);
-    y = random(110 + size / 2, height - 115 - size / 2);
+    x = random(
+      18 + size / 2,
+      width - 18 - size / 2
+    );
+
+    y = random(
+      110 + size / 2,
+      height - 115 - size / 2
+    );
 
     if (
       !canvasArea ||
       dist(x, y, canvasArea.x, canvasArea.y) >
-      canvasArea.radius + size * 0.55
+        canvasArea.radius + size * 0.55
     ) {
       found = true;
       break;
@@ -1709,29 +1474,41 @@ function updateWaitingBubbles() {
     if (b.popping) continue;
 
     b.y -= b.speed;
-    b.x += sin(frameCount * 0.7 + b.phase) * b.drift;
+
+    b.x +=
+      sin(frameCount * 0.7 + b.phase) *
+      b.drift;
+
     b.rotation += b.rotationSpeed;
 
-    b.x = constrain(b.x, b.size / 2, width - b.size / 2);
+    b.x = constrain(
+      b.x,
+      b.size / 2,
+      width - b.size / 2
+    );
 
     if (
       canvasArea &&
       dist(b.x, b.y, canvasArea.x, canvasArea.y) <
-      canvasArea.radius + b.size * 0.55
+        canvasArea.radius + b.size * 0.55
     ) {
       b.y -= b.speed + 0.5;
     }
 
     if (b.y < -b.size) {
       waitingBubbles[i] = makeWaitingBubble();
-      waitingBubbles[i].y = height + random(20, 100);
+
+      waitingBubbles[i].y =
+        height + random(20, 100);
     }
   }
 }
 
 function drawWaitingBubbles() {
   for (const b of waitingBubbles) {
-    if (!b.popping) drawWaitingBubble(b);
+    if (!b.popping) {
+      drawWaitingBubble(b);
+    }
   }
 }
 
@@ -1765,10 +1542,21 @@ function drawWaitingBubble(b) {
 
   noStroke();
   fill(255, 255, 255, 155);
-  ellipse(-b.size * 0.22, -b.size * 0.25, b.size * 0.22, b.size * 0.10);
+
+  ellipse(
+    -b.size * 0.22,
+    -b.size * 0.25,
+    b.size * 0.22,
+    b.size * 0.10
+  );
 
   fill(255, 255, 255, 100);
-  circle(b.size * 0.24, b.size * 0.22, b.size * 0.07);
+
+  circle(
+    b.size * 0.24,
+    b.size * 0.22,
+    b.size * 0.07
+  );
 
   pop();
 }
@@ -1785,11 +1573,16 @@ function popWaitingBubble(b) {
     startTime: millis()
   });
 
-  const group = getGroupState();
+  // Each mode has an independent counter.
 
-  if (group) {
-    group.bubblePopCount =
-      (Number(group.bubblePopCount) || 0) + 1;
+  const state =
+    activeMode === "worldwide"
+      ? getWorldwideState()
+      : getGroupState();
+
+  if (state && window.shareConnected) {
+    state.bubblePopCount =
+      (Number(state.bubblePopCount) || 0) + 1;
   }
 }
 
@@ -1807,20 +1600,26 @@ function drawBubblePopAnimations() {
       1
     );
 
-    const size = animation.size * (1 + progress * 0.8);
+    const size =
+      animation.size * (1 + progress * 0.8);
+
     const alpha = 180 * (1 - progress);
 
     noFill();
     stroke(255, 255, 255, alpha);
     strokeWeight(2);
+
     circle(animation.x, animation.y, size);
 
     for (let j = 0; j < 5; j++) {
       const angle = j * 72;
-      const distance = progress * animation.size * 0.55;
+
+      const distance =
+        progress * animation.size * 0.55;
 
       noStroke();
       fill(255, 255, 255, alpha);
+
       circle(
         animation.x + cos(angle) * distance,
         animation.y + sin(angle) * distance,
@@ -1834,27 +1633,34 @@ function drawBubblePopAnimations() {
       const index = waitingBubbles.findIndex(
         b =>
           b.popping &&
-          dist(b.x, b.y, animation.x, animation.y) < 1
+          dist(
+            b.x,
+            b.y,
+            animation.x,
+            animation.y
+          ) < 1
       );
 
       if (index !== -1) {
         waitingBubbles[index] = makeWaitingBubble();
-        waitingBubbles[index].y = height + random(30, 100);
+
+        waitingBubbles[index].y =
+          height + random(30, 100);
       }
     }
   }
 }
 
-// --------------------------------------------------
-// GROUP VERSION HISTORY — SHARED SNAPSHOTS
-// --------------------------------------------------
+// ==================================================
+// GROUP VERSION BUBBLES
+// ==================================================
 
 function getVersionId(snapshot) {
-  if (snapshot && snapshot.id !== undefined) {
+  if (snapshot?.id !== undefined) {
     return String(snapshot.id);
   }
 
-  if (snapshot && snapshot.version !== undefined) {
+  if (snapshot?.version !== undefined) {
     return "version-" + snapshot.version;
   }
 
@@ -1862,7 +1668,12 @@ function getVersionId(snapshot) {
 }
 
 function syncVersionBubbles() {
-  if (activeMode !== "group" || !window.shareConnected) return;
+  if (
+    activeMode !== "group" ||
+    !window.shareConnected
+  ) {
+    return;
+  }
 
   const data = getSharedData();
 
@@ -1872,7 +1683,10 @@ function syncVersionBubbles() {
     if (!id || seenVersionIds.has(id)) continue;
 
     seenVersionIds.add(id);
-    versionBubbles.push(makeVersionBubble(snapshot, id));
+
+    versionBubbles.push(
+      makeVersionBubble(snapshot, id)
+    );
   }
 }
 
@@ -1885,13 +1699,20 @@ function makeVersionBubble(snapshot, id) {
   return {
     id,
     snapshot,
-    x: random(size / 2 + 12, width - size / 2 - 12),
+
+    x: random(
+      size / 2 + 12,
+      width - size / 2 - 12
+    ),
+
     y: height + random(30, 100),
     size,
+
     speed: random(
       VERSION_BUBBLE_SPEED_MIN,
       VERSION_BUBBLE_SPEED_MAX
     ),
+
     drift: random(0.2, 0.55),
     phase: random(360),
     rotation: random(360),
@@ -1905,10 +1726,18 @@ function updateVersionBubbles() {
     const b = versionBubbles[i];
 
     b.y -= b.speed;
-    b.x += sin(frameCount * 0.6 + b.phase) * b.drift;
+
+    b.x +=
+      sin(frameCount * 0.6 + b.phase) *
+      b.drift;
+
     b.rotation += b.rotationSpeed;
 
-    b.x = constrain(b.x, b.size / 2, width - b.size / 2);
+    b.x = constrain(
+      b.x,
+      b.size / 2,
+      width - b.size / 2
+    );
 
     if (b.y < -b.size) {
       versionBubbles.splice(i, 1);
@@ -1920,6 +1749,26 @@ function drawVersionBubbles() {
   for (const b of versionBubbles) {
     drawVersionBubble(b);
   }
+}
+
+function drawRainbowRing(x, y, size, alpha, weight) {
+  noFill();
+  strokeWeight(weight);
+
+  stroke(98, 214, 206, alpha);
+  arc(x, y, size, size, 190, 265);
+
+  stroke(182, 155, 255, alpha);
+  arc(x, y, size, size, 265, 335);
+
+  stroke(255, 156, 203, alpha);
+  arc(x, y, size, size, 335, 50);
+
+  stroke(40, 123, 255, alpha);
+  arc(x, y, size, size, 50, 120);
+
+  stroke(255, 230, 109, alpha);
+  arc(x, y, size, size, 120, 190);
 }
 
 function drawVersionBubble(b) {
@@ -1935,6 +1784,7 @@ function drawVersionBubble(b) {
 
   noStroke();
   fill(12, 18, 25, 220);
+
   circle(b.x, b.y, b.size * 0.82);
 
   const snapshot = b.snapshot;
@@ -1954,39 +1804,30 @@ function drawVersionBubble(b) {
   translate(b.x, b.y);
   rotate(b.rotation);
 
-  noFill();
-  strokeWeight(2.5);
-
-  stroke(98, 214, 206, b.alpha);
-  arc(0, 0, b.size, b.size, 190, 265);
-
-  stroke(182, 155, 255, b.alpha);
-  arc(0, 0, b.size, b.size, 265, 335);
-
-  stroke(255, 156, 203, b.alpha);
-  arc(0, 0, b.size, b.size, 335, 50);
-
-  stroke(40, 123, 255, b.alpha);
-  arc(0, 0, b.size, b.size, 50, 120);
-
-  stroke(255, 230, 109, b.alpha);
-  arc(0, 0, b.size, b.size, 120, 190);
+  drawRainbowRing(0, 0, b.size, b.alpha, 2.5);
 
   noStroke();
   fill(255, 255, 255, 180);
-  ellipse(-b.size * 0.22, -b.size * 0.25, b.size * 0.22, b.size * 0.10);
+
+  ellipse(
+    -b.size * 0.22,
+    -b.size * 0.25,
+    b.size * 0.22,
+    b.size * 0.10
+  );
 
   pop();
 
   noFill();
   stroke(255, 255, 255, 125);
   strokeWeight(1);
+
   circle(b.x, b.y, drawingDiameter);
 }
 
-// --------------------------------------------------
-// GROUP VERSION HISTORY — LOCAL PREVIEW
-// --------------------------------------------------
+// ==================================================
+// GROUP VERSION PREVIEWS
+// ==================================================
 
 function openVersionPreview(bubble) {
   if (!bubble || activeVersionPreview) return;
@@ -2063,19 +1904,19 @@ function drawVersionPreview() {
   let alpha = 255;
 
   if (preview.popping) {
-    const popProgress = constrain(
+    const progress = constrain(
       (millis() - preview.popStartTime) /
-      VERSION_PREVIEW_POP_TIME,
+        VERSION_PREVIEW_POP_TIME,
       0,
       1
     );
 
-    previewSize *= 1 - popProgress;
-    alpha = 255 * (1 - popProgress);
+    previewSize *= 1 - progress;
+    alpha = 255 * (1 - progress);
 
     drawVersionPreviewPop(preview);
 
-    if (popProgress >= 1) {
+    if (progress >= 1) {
       activeVersionPreview = null;
       return;
     }
@@ -2095,9 +1936,11 @@ function drawVersionPreview() {
 
   noStroke();
   fill(8, 18, 28, 245 * alpha / 255);
+
   circle(previewX, previewY, previewSize);
 
   fill(16, 16, 16, 245 * alpha / 255);
+
   circle(previewX, previewY, drawingDiameter);
 
   const snapshot = preview.snapshot;
@@ -2112,27 +1955,18 @@ function drawVersionPreview() {
     }
   }
 
-  noFill();
-  strokeWeight(3);
-
-  stroke(98, 214, 206, alpha);
-  arc(previewX, previewY, previewSize, previewSize, 190, 265);
-
-  stroke(182, 155, 255, alpha);
-  arc(previewX, previewY, previewSize, previewSize, 265, 335);
-
-  stroke(255, 156, 203, alpha);
-  arc(previewX, previewY, previewSize, previewSize, 335, 50);
-
-  stroke(40, 123, 255, alpha);
-  arc(previewX, previewY, previewSize, previewSize, 50, 120);
-
-  stroke(255, 230, 109, alpha);
-  arc(previewX, previewY, previewSize, previewSize, 120, 190);
+  drawRainbowRing(
+    previewX,
+    previewY,
+    previewSize,
+    alpha,
+    3
+  );
 
   noFill();
   stroke(255, 255, 255, 170 * alpha / 255);
   strokeWeight(1.5);
+
   circle(previewX, previewY, drawingDiameter);
 
   if (
@@ -2159,6 +1993,7 @@ function drawVersionPreview() {
     fill(255, 255, 255, labelAlpha);
     textAlign(CENTER, CENTER);
     textSize(12);
+
     text(
       "SHAKE TO POP",
       previewX,
@@ -2174,10 +2009,12 @@ function drawCurvedVersionLabel(label, x, y, radius, alpha) {
   textSize(13);
   textStyle(BOLD);
   textAlign(CENTER, CENTER);
+
   fill(255, 255, 255, alpha);
   noStroke();
 
   const totalWidth = textWidth(label);
+
   const angleSpan = min(
     125,
     (totalWidth / radius) * 57.2958
@@ -2200,13 +2037,16 @@ function drawCurvedVersionLabel(label, x, y, radius, alpha) {
       -90 + angleSpan / 2
     );
 
-    const letterX = x + cos(angle) * radius;
-    const letterY = y + sin(angle) * radius;
-
     push();
-    translate(letterX, letterY);
+
+    translate(
+      x + cos(angle) * radius,
+      y + sin(angle) * radius
+    );
+
     rotate(angle + 90);
     text(character, 0, 0);
+
     pop();
 
     currentWidth += characterWidth;
@@ -2239,10 +2079,9 @@ function createVersionPreviewDroplets(x, y, size) {
 }
 
 function drawVersionPreviewPop(preview) {
-  const elapsed = millis() - preview.popStartTime;
-
   const progress = constrain(
-    elapsed / VERSION_PREVIEW_POP_TIME,
+    (millis() - preview.popStartTime) /
+      VERSION_PREVIEW_POP_TIME,
     0,
     1
   );
@@ -2254,7 +2093,9 @@ function drawVersionPreviewPop(preview) {
   const baseSize = preview.startSize;
 
   for (let i = 0; i < 14; i++) {
-    const angle = i * (360 / 14) + sin(i * 41) * 12;
+    const angle =
+      i * (360 / 14) + sin(i * 41) * 12;
+
     const delay = (i % 4) * 0.035;
 
     const splashProgress = constrain(
@@ -2274,12 +2115,25 @@ function drawVersionPreviewPop(preview) {
 
     const x1 = centerX + cos(angle) * distance;
     const y1 = centerY + sin(angle) * distance;
-    const x2 = centerX + cos(angle) * (distance + streakLength);
-    const y2 = centerY + sin(angle) * (distance + streakLength);
 
-    stroke(255, 255, 255, 190 * (1 - splashProgress));
+    const x2 =
+      centerX + cos(angle) *
+        (distance + streakLength);
+
+    const y2 =
+      centerY + sin(angle) *
+        (distance + streakLength);
+
+    stroke(
+      255,
+      255,
+      255,
+      190 * (1 - splashProgress)
+    );
+
     strokeWeight(2.5);
     strokeCap(ROUND);
+
     line(x1, y1, x2, y2);
   }
 
@@ -2329,8 +2183,11 @@ function drawVersionPreviewPop(preview) {
   noStroke();
   fill(255, 255, 255, 180 * (1 - progress));
 
-  const flashSize = baseSize * 0.2 * eased;
-  circle(centerX, centerY, flashSize);
+  circle(
+    centerX,
+    centerY,
+    baseSize * 0.2 * eased
+  );
 
   for (const d of preview.droplets) {
     d.x += d.vx;
@@ -2338,13 +2195,13 @@ function drawVersionPreviewPop(preview) {
     d.vy += 0.025;
     d.alpha *= 0.985;
 
-    const direction = atan2(d.vy, d.vx);
-
     push();
+
     translate(d.x, d.y);
-    rotate(direction);
+    rotate(atan2(d.vy, d.vx));
 
     noStroke();
+
     fill(
       d.r,
       d.g,
@@ -2354,7 +2211,13 @@ function drawVersionPreviewPop(preview) {
 
     ellipse(0, 0, d.size * 2.8, d.size * 1.7);
 
-    fill(255, 255, 255, d.alpha * 0.35 * (1 - progress));
+    fill(
+      255,
+      255,
+      255,
+      d.alpha * 0.35 * (1 - progress)
+    );
+
     ellipse(
       -d.size * 0.35,
       -d.size * 0.25,
@@ -2379,14 +2242,14 @@ function deviceShaken() {
 
   if (
     millis() - preview.startTime <
-    VERSION_PREVIEW_EXPAND_TIME
+      VERSION_PREVIEW_EXPAND_TIME
   ) {
     return;
   }
 
   if (
     millis() - lastVersionShake <
-    VERSION_PREVIEW_SHAKE_COOLDOWN
+      VERSION_PREVIEW_SHAKE_COOLDOWN
   ) {
     return;
   }
@@ -2396,22 +2259,28 @@ function deviceShaken() {
   preview.popping = true;
   preview.popStartTime = millis();
 
-  preview.droplets = createVersionPreviewDroplets(
-    preview.x,
-    preview.y,
-    preview.startSize
-  );
-
-  console.log("VERSION PREVIEW POPPED");
+  preview.droplets =
+    createVersionPreviewDroplets(
+      preview.x,
+      preview.y,
+      preview.startSize
+    );
 }
 
-// --------------------------------------------------
-// GROUP FOOTER AND TURN CONTROLS
-// --------------------------------------------------
+// ==================================================
+// GROUP TURNS
+// ==================================================
 
 function drawFooter() {
-  drawButton(leftButton, drawingMode ? "DRAWING" : "MY TURN");
-  drawButton(rightButton, drawingMode ? "FINISH" : "PASS");
+  drawButton(
+    leftButton,
+    drawingMode ? "DRAWING" : "MY TURN"
+  );
+
+  drawButton(
+    rightButton,
+    drawingMode ? "FINISH" : "PASS"
+  );
 
   noStroke();
   fill(MUTED);
@@ -2420,171 +2289,1155 @@ function drawFooter() {
 
   text(
     drawingMode
-      ? (eraserMode
-          ? "Erasing your own strokes. Tap ER to draw again."
-          : "Add to the drawing, then finish your turn.")
+      ? (
+          eraserMode
+            ? "Erasing your own strokes. Tap ER to draw again."
+            : "Add to the drawing, then finish your turn."
+        )
       : "Tap the floating bubbles while you wait.",
     width / 2,
     height - 22
   );
 }
 
-function drawButton(button, label) {
-  noStroke();
-  fill(window.shareConnected ? WHITE : "#555555");
+function startTurn() {
+  if (!window.shareConnected) return;
 
-  rect(button.x, button.y, button.w, button.h, 8);
+  drawingMode = true;
+  eraserMode = false;
 
-  fill(window.shareConnected ? "#000000" : WHITE);
-  textAlign(CENTER, CENTER);
-  textSize(13);
+  localStrokes = [];
+  currentStroke = null;
+}
 
-  text(
-    label,
-    button.x + button.w / 2,
-    button.y + button.h / 2
+function finishTurn() {
+  if (!window.shareConnected) return;
+
+  const group = getGroupState();
+
+  if (!group) return;
+
+  mouseReleased();
+
+  const data = getSharedData();
+
+  if (localStrokes.length > 0) {
+    const nextVersion = data.version + 1;
+    const nextTurn = data.turnCount + 1;
+
+    const completedStrokes =
+      data.strokes.concat(localStrokes);
+
+    group.strokes = completedStrokes;
+    group.version = nextVersion;
+    group.lastAction = "edited";
+
+    const snapshot = {
+      id:
+        "version-" + nextVersion +
+        "-turn-" + nextTurn,
+
+      version: nextVersion,
+      turn: nextTurn,
+
+      zoomLevel:
+        Number(group.zoomLevel) || MAX_ZOOM,
+
+      strokes: cloneData(completedStrokes)
+    };
+
+    group.versions =
+      data.versions.concat([snapshot]);
+  } else {
+    group.lastAction = "passed";
+  }
+
+  group.turnCount = data.turnCount + 1;
+
+  drawingMode = false;
+  eraserMode = false;
+
+  localStrokes = [];
+  currentStroke = null;
+}
+
+function passTurn() {
+  if (!window.shareConnected) return;
+
+  const group = getGroupState();
+
+  if (!group) return;
+
+  group.lastAction = "passed";
+
+  group.turnCount =
+    (Number(group.turnCount) || 0) + 1;
+}
+
+// ==================================================
+// WORLDWIDE — COLLECTION HELPERS
+// ==================================================
+
+function worldwideId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ||
+    Date.now().toString(36) +
+      "-" +
+      Math.random().toString(36).slice(2)
   );
 }
 
-// --------------------------------------------------
-// INPUT
-// --------------------------------------------------
+function worldwideArtworks() {
+  const w = getWorldwideState();
 
-function mousePressed() {
-  if (activeMode === "menu") {
+  if (!Array.isArray(w?.artworks)) {
+    return [];
+  }
+
+  return w.artworks.filter(
+    artwork =>
+      artwork &&
+      artwork.id &&
+      Array.isArray(artwork.strokes)
+  );
+}
+
+function worldwidePrompts() {
+  const w = getWorldwideState();
+
+  const prompts = Array.isArray(w?.prompts)
+    ? w.prompts
+    : [];
+
+  return prompts
+    .map(
+      p => typeof p === "string" ? p : p?.text
+    )
+    .filter(
+      p => typeof p === "string" && p.trim()
+    );
+}
+
+function worldwidePick(items) {
+  if (!items.length) return null;
+
+  return items[
+    Math.floor(Math.random() * items.length)
+  ];
+}
+
+function worldwideArtwork(id) {
+  return worldwideArtworks().find(
+    artwork => artwork.id === id
+  ) || null;
+}
+
+// ==================================================
+// WORLDWIDE — IMPORT STARTING ARTWORKS
+// ==================================================
+
+async function prepareWorldwide() {
+  if (worldwideSeedsLoaded) return true;
+
+  if (worldwideSeedPending) {
+    return worldwideSeedPending;
+  }
+
+  worldwideSeedPending = (async () => {
     if (
-      groupMenuButton &&
-      insideButton(mouseX, mouseY, groupMenuButton)
+      !window.shareConnected ||
+      !ensureSharedStructure()
     ) {
-      connectToShare();
+      return false;
+    }
 
-      activeMode = "group";
-      drawingMode = false;
-      eraserMode = false;
-      localStrokes = [];
-      currentStroke = null;
+    const importedArtworks = [];
 
-      updateLayout();
-      createWaitingBubbles();
+    // Existing shared artwork is always preferred.
+    // JSON backups only restore missing artwork IDs.
+
+    await Promise.all(
+      STARTING_ARTWORK_FILES.map(
+        async (filename, index) => {
+          const expectedId =
+            "starting-artwork-" + (index + 1);
+
+          if (worldwideArtwork(expectedId)) {
+            return;
+          }
+
+          try {
+            const response = await fetch(
+              "./" + filename,
+              { cache: "no-cache" }
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                "HTTP " + response.status
+              );
+            }
+
+            const data = await response.json();
+
+            if (
+              data.format !== "bubble-pop-artwork" ||
+              data.artwork?.id !== expectedId ||
+              !Array.isArray(data.artwork.strokes)
+            ) {
+              throw new Error("Invalid artwork file");
+            }
+
+            importedArtworks.push(data.artwork);
+
+            console.log("Loaded:", filename);
+          } catch (error) {
+            console.warn(
+              "Starting artwork unavailable:",
+              filename,
+              error
+            );
+          }
+        }
+      )
+    );
+
+    const w = getWorldwideState();
+
+    if (!window.shareConnected || !w) {
+      return false;
+    }
+
+    // Check for duplicates again after fetching.
+
+    for (const artwork of importedArtworks) {
+      if (!worldwideArtwork(artwork.id)) {
+        w.artworks.push(cloneData(artwork));
+      }
+    }
+
+    if (!worldwidePrompts().length) {
+      w.prompts = DEFAULT_PROMPTS.map(
+        (text, index) => ({
+          id: "seed-prompt-" + index,
+          text
+        })
+      );
+    }
+
+    worldwideSeedsLoaded = true;
+
+    console.log(
+      "Worldwide collection:",
+      worldwideArtworks().length,
+      "artworks"
+    );
+
+    console.log(
+      "Starting artwork IDs:",
+      worldwideArtworks().map(a => a.id)
+    );
+
+    if (worldwideArtworks().length === 0) {
+      console.warn(
+        "No starting artworks available. Prompts remain usable."
+      );
+    }
+
+    return true;
+  })();
+
+  try {
+    return await worldwideSeedPending;
+  } finally {
+    worldwideSeedPending = null;
+  }
+}
+
+// ==================================================
+// WORLDWIDE — NAVIGATION
+// ==================================================
+
+function resetWorldwideEntry() {
+  drawingMode = false;
+  eraserMode = false;
+
+  currentStroke = null;
+  localStrokes = [];
+
+  brushAdjustmentActive = false;
+  brushPermissionPending = false;
+
+  worldwidePage = "loading";
+  worldwideSelected = null;
+  worldwideBase = null;
+  worldwideMessage = "";
+  worldwideBubbles = [];
+  worldwideMediaKey = "";
+
+  bubblePopAnimations = [];
+}
+
+function worldwideRandomEntry() {
+  const choices = worldwideArtworks()
+    .map(a => ({ id: a.id }))
+    .concat(
+      worldwidePrompts().map(text => ({ text }))
+    );
+
+  const choice = worldwidePick(choices);
+
+  if (choice?.id) {
+    worldwideOpenArtwork(choice.id);
+  } else {
+    worldwideOpenPrompt(choice?.text);
+  }
+}
+
+function worldwideOpenArtwork(id) {
+  const artwork = worldwideArtwork(id);
+
+  if (!artwork) return;
+
+  drawingMode = false;
+  eraserMode = false;
+
+  worldwideSelected = id;
+  worldwidePage = "view";
+  worldwideBase = null;
+
+  worldwideTools.zoomLevel =
+    Number(artwork.zoomLevel) || MAX_ZOOM;
+
+  worldwideMessage = "";
+  worldwideMediaKey = "";
+}
+
+function worldwideOpenPrompt(promptText) {
+  drawingMode = false;
+  eraserMode = false;
+
+  worldwideSelected = null;
+
+  worldwidePrompt =
+    promptText ||
+    worldwidePick(worldwidePrompts()) ||
+    worldwidePick(DEFAULT_PROMPTS);
+
+  worldwidePage = "prompt";
+  worldwideBase = null;
+
+  worldwideTools.zoomLevel = MAX_ZOOM;
+
+  worldwideMessage = "";
+  worldwideMediaKey = "";
+}
+
+// ==================================================
+// WORLDWIDE — CONTRIBUTION
+// ==================================================
+
+function worldwideStartDrawing() {
+  if (!window.shareConnected) return;
+
+  if (
+    worldwideSelected &&
+    worldwideVisited.has(worldwideSelected)
+  ) {
+    worldwideMessage =
+      "You have already contributed to this artwork.";
+
+    return;
+  }
+
+  const artwork = worldwideSelected
+    ? worldwideArtwork(worldwideSelected)
+    : null;
+
+  if (worldwideSelected && !artwork) {
+    worldwideMessage = "This artwork is unavailable.";
+    return;
+  }
+
+  worldwideBase = artwork
+    ? cloneData(artwork)
+    : null;
+
+  worldwideTools.zoomLevel =
+    Number(artwork?.zoomLevel) || MAX_ZOOM;
+
+  drawingMode = true;
+  eraserMode = false;
+
+  localStrokes = [];
+  currentStroke = null;
+
+  worldwidePage = "draw";
+  worldwideMessage = "";
+}
+
+function worldwideFinish() {
+  if (!window.shareConnected) {
+    worldwideMessage = "Reconnect before saving.";
+    return;
+  }
+
+  const w = getWorldwideState();
+
+  if (!w) return;
+
+  mouseReleased();
+
+  // A blank contribution does not create a new version.
+
+  if (!localStrokes.length) {
+    worldwideEnd("Thank you for exploring.");
+    return;
+  }
+
+  const marks = cloneData(localStrokes);
+  const zoom = worldwideTools.zoomLevel;
+
+  if (worldwideSelected) {
+    const artwork =
+      worldwideArtwork(worldwideSelected);
+
+    if (
+      !artwork ||
+      worldwideVisited.has(worldwideSelected)
+    ) {
+      worldwideMessage =
+        "Artwork unavailable or already contributed to.";
+
       return;
     }
 
+    const previousVersion =
+      Number(artwork.version) || 1;
+
+    const history = cloneData(
+      Array.isArray(artwork.versions)
+        ? artwork.versions
+        : []
+    );
+
+    // Preserve the previous version.
+
     if (
-      worldwideMenuButton &&
-      insideButton(mouseX, mouseY, worldwideMenuButton)
+      !history.some(
+        v => v.version === previousVersion
+      )
     ) {
-      connectToShare();
-      activeMode = "worldwide";
-      updateLayout();
+      history.push({
+        id: worldwideId(),
+        version: previousVersion,
+
+        zoomLevel:
+          artwork.zoomLevel || MAX_ZOOM,
+
+        strokes: cloneData(artwork.strokes)
+      });
+    }
+
+    const nextVersion = previousVersion + 1;
+
+    // Add the new contribution to the latest
+    // available artwork rather than replacing it.
+
+    const completedStrokes =
+      cloneData(artwork.strokes).concat(marks);
+
+    const submission = {
+      id: worldwideId(),
+      version: nextVersion,
+
+      baseVersion:
+        worldwideBase?.version ||
+        previousVersion,
+
+      zoomLevel: zoom,
+      strokes: cloneData(completedStrokes)
+    };
+
+    const index = w.artworks.findIndex(
+      item => item.id === artwork.id
+    );
+
+    if (index === -1) {
+      worldwideMessage = "Artwork not found.";
       return;
     }
 
-    // TEMPORARY CREATOR entry.
-    if (
-      creatorMenuButton &&
-      insideButton(mouseX, mouseY, creatorMenuButton)
-    ) {
-      connectToShare();
+    w.artworks[index] = {
+      ...cloneData(artwork),
+      version: nextVersion,
+      zoomLevel: zoom,
+      strokes: completedStrokes,
+      versions: history.concat([submission])
+    };
 
-      activeMode = "creator";
+    worldwideVisited.add(artwork.id);
 
-      creatorStrokes = [];
-      creatorCurrentStroke = null;
-      creatorEraserMode = false;
+    console.log(
+      "Worldwide contribution added:",
+      artwork.id,
+      "Version",
+      nextVersion
+    );
+  } else {
+    // A drawing made from a prompt becomes
+    // a completely new artwork.
 
-      creatorToolSettings = {
-        brushColor: "#FFFFFF",
-        brushSize: 4,
-        zoomLevel: MAX_ZOOM
-      };
+    if (worldwideArtworks().length >= 13) {
+      worldwideMessage =
+        "Collection is full. Cancel to explore other art.";
 
-      creatorStatus = "Draw an artwork, then save and export it.";
-      creatorStatusTime = millis();
-
-      brushAdjustmentActive = false;
-      brushPermissionPending = false;
-
-      updateLayout();
       return;
+    }
+
+    const id = worldwideId();
+
+    const newArtwork = {
+      id,
+      title: "Anonymous artwork",
+      type: "drawing",
+      prompt: worldwidePrompt,
+      version: 1,
+      zoomLevel: zoom,
+      strokes: marks,
+
+      versions: [
+        {
+          id: worldwideId(),
+          version: 1,
+          zoomLevel: zoom,
+          strokes: cloneData(marks)
+        }
+      ],
+
+      createdAt: new Date().toISOString()
+    };
+
+    w.artworks.push(newArtwork);
+
+    worldwideVisited.add(id);
+
+    console.log(
+      "New Worldwide artwork created:",
+      id
+    );
+  }
+
+  worldwideEnd("Your contribution has been added.");
+}
+
+// ==================================================
+// WORLDWIDE — WRITTEN PROMPTS
+// ==================================================
+
+function worldwideLeavePrompt() {
+  if (!window.shareConnected) return;
+
+  const w = getWorldwideState();
+
+  if (!w) return;
+
+  const value = window.prompt(
+    "Leave a short drawing prompt for someone else (no names or personal information):"
+  );
+
+  const promptText = value?.trim().slice(0, 160);
+
+  if (!promptText) return;
+
+  if (worldwidePrompts().length >= 30) {
+    worldwideMessage =
+      "The prompt collection is full.";
+
+    return;
+  }
+
+  if (!worldwidePrompts().includes(promptText)) {
+    w.prompts.push({
+      id: worldwideId(),
+      text: promptText
+    });
+  }
+
+  worldwideEnd("Your prompt has been left behind.");
+}
+
+function worldwideEnd(message) {
+  drawingMode = false;
+  eraserMode = false;
+
+  localStrokes = [];
+  currentStroke = null;
+
+  brushAdjustmentActive = false;
+  brushPermissionPending = false;
+
+  worldwideBase = null;
+  worldwideSelected = null;
+  worldwidePage = "thanks";
+  worldwideMessage = message;
+}
+
+// ==================================================
+// WORLDWIDE — FLOATING ARTWORK BUBBLES
+// ==================================================
+
+function worldwideSyncBubbles() {
+  const choices = worldwideArtworks()
+    .filter(a => a.id !== worldwideSelected)
+    .map(a => ({
+      id: a.id,
+      snapshot: a
+    }));
+
+  const promptChoice =
+    worldwidePick(worldwidePrompts());
+
+  if (promptChoice) {
+    choices.push({
+      id: "prompt:" + promptChoice,
+      text: promptChoice
+    });
+  }
+
+  const key =
+    worldwideArtworks()
+      .map(a => a.id + ":" + a.version)
+      .join("|") +
+    "/" +
+    worldwideSelected;
+
+  if (
+    key !== worldwideMediaKey ||
+    (
+      worldwideBubbles.length === 0 &&
+      millis() - worldwideLastBubbleRefresh > 1000
+    )
+  ) {
+    worldwideMediaKey = key;
+    worldwideLastBubbleRefresh = millis();
+    worldwideBubbles = [];
+
+    while (
+      choices.length &&
+      worldwideBubbles.length < 4
+    ) {
+      const choice = choices.splice(
+        Math.floor(Math.random() * choices.length),
+        1
+      )[0];
+
+      const bubble = makeVersionBubble(
+        choice.snapshot || null,
+        choice.id
+      );
+
+      bubble.y = random(
+        145,
+        Math.max(155, height - 235)
+      );
+
+      bubble.x =
+        worldwideBubbles.length % 2
+          ? width - bubble.size / 2 - 12
+          : bubble.size / 2 + 12;
+
+      bubble.text = choice.text;
+
+      worldwideBubbles.push(bubble);
+    }
+  }
+
+  for (const b of worldwideBubbles) {
+    b.y -= b.speed;
+    b.rotation += b.rotationSpeed;
+
+    if (b.y < 125) {
+      b.y = height - 245;
+    }
+
+    if (b.text) {
+      drawWaitingBubble(b);
+
+      noStroke();
+      fill(WHITE);
+      textAlign(CENTER, CENTER);
+      textSize(20);
+
+      text("?", b.x, b.y);
+    } else {
+      drawVersionBubble(b);
+    }
+  }
+}
+
+// ==================================================
+// WORLDWIDE — INTERFACE
+// ==================================================
+
+function drawWorldwide() {
+  const w = getWorldwideState();
+
+  noStroke();
+  fill(WHITE);
+  textAlign(LEFT, TOP);
+  textSize(25);
+
+  text("bubble pop", 20, 18);
+
+  fill(MUTED);
+  textSize(13);
+
+  text("Worldwide · anonymous discoveries", 21, 53);
+
+  textSize(11);
+
+  text(
+    "Bubbles popped: " +
+      (w?.bubblePopCount || 0),
+    21,
+    88
+  );
+
+  drawSmallTextButton(
+    worldwideBackButton,
+    "MODES"
+  );
+
+  textAlign(RIGHT, TOP);
+  fill(MUTED);
+  textSize(10);
+
+  text(
+    window.shareConnected
+      ? "CONNECTED"
+      : "CONNECTING...",
+    width - 20,
+    25
+  );
+
+  if (
+    !window.shareConnected ||
+    !w ||
+    worldwidePage === "loading"
+  ) {
+    if (
+      window.shareConnected &&
+      w &&
+      !worldwideSeedPending
+    ) {
+      prepareWorldwide()
+        .then(ok => {
+          if (
+            ok &&
+            activeMode === "worldwide" &&
+            worldwidePage === "loading"
+          ) {
+            worldwideRandomEntry();
+          }
+        })
+        .catch(error => {
+          console.error(error);
+
+          worldwideMessage =
+            "Unable to load collection. Reopen Worldwide.";
+        });
+    }
+
+    fill(MUTED);
+    textAlign(CENTER, CENTER);
+    textSize(14);
+
+    text(
+      worldwideMessage ||
+        "Loading the collection...",
+      width / 2,
+      height / 2
+    );
+
+    return;
+  }
+
+  const artwork =
+    worldwidePage === "draw"
+      ? worldwideBase
+      : worldwideArtwork(worldwideSelected);
+
+  if (worldwidePage === "view" && !artwork) {
+    worldwideRandomEntry();
+    return;
+  }
+
+  if (worldwidePage === "view" && artwork) {
+    worldwideTools.zoomLevel =
+      Number(artwork.zoomLevel) || MAX_ZOOM;
+  }
+
+  if (artwork) {
+    fill(MUTED);
+    textAlign(LEFT, TOP);
+    textSize(12);
+
+    text(
+      "Version " + artwork.version,
+      21,
+      105
+    );
+  }
+
+  drawCircleBackground();
+
+  // Thank-you screen.
+
+  if (worldwidePage === "thanks") {
+    noStroke();
+    fill(WHITE);
+    textAlign(CENTER, CENTER);
+    textSize(19);
+
+    text(
+      "Thank you",
+      canvasArea.x,
+      canvasArea.y - 24
+    );
+
+    fill(MUTED);
+    textSize(13);
+
+    text(
+      worldwideMessage,
+      canvasArea.x - canvasArea.diameter / 2 + 20,
+      canvasArea.y - 4,
+      canvasArea.diameter - 40,
+      70
+    );
+
+    drawButton(leftButton, "EXPLORE AGAIN");
+    drawButton(rightButton, "BACK TO MODES");
+
+    return;
+  }
+
+  // Draw the current artwork.
+
+  if (artwork) {
+    for (const strokeData of artwork.strokes) {
+      drawStroke(strokeData);
+    }
+  }
+
+  // Drawing state.
+
+  if (drawingMode) {
+    drawLocalArtwork();
+
+    if (eraserMode) {
+      drawEraserCursor();
+    }
+
+    drawSharedToolControls();
+
+    if (!artwork) {
+      noStroke();
+      fill(MUTED);
+      textAlign(CENTER, CENTER);
+      textSize(11);
+
+      text(
+        worldwidePrompt,
+        20,
+        119,
+        width - 40,
+        28
+      );
+    }
+
+    drawButton(leftButton, "CANCEL");
+    drawButton(rightButton, "FINISH");
+  } else {
+    // Discovery state.
+
+    if (worldwidePage === "prompt") {
+      noStroke();
+      fill(WHITE);
+      textAlign(CENTER, CENTER);
+      textSize(17);
+
+      text(
+        worldwidePrompt,
+        canvasArea.x -
+          canvasArea.diameter / 2 + 22.5,
+
+        canvasArea.y -
+          canvasArea.diameter / 2 + 22.5,
+
+        canvasArea.diameter - 45,
+        canvasArea.diameter - 45
+      );
+    }
+
+    updateWaitingBubbles();
+    drawWaitingBubbles();
+    drawBubblePopAnimations();
+
+    worldwideSyncBubbles();
+
+    drawSmallTextButton(
+      worldwidePromptButton,
+      "LEAVE A PROMPT"
+    );
+
+    const alreadyContributed =
+      worldwideSelected &&
+      worldwideVisited.has(worldwideSelected);
+
+    drawButton(
+      leftButton,
+
+      worldwidePage === "prompt"
+        ? "CREATE"
+        : alreadyContributed
+          ? "ALREADY ADDED"
+          : "CONTRIBUTE"
+    );
+
+    drawButton(rightButton, "NEXT");
+  }
+
+  noStroke();
+  fill(MUTED);
+  textAlign(CENTER, TOP);
+  textSize(11);
+
+  text(
+    worldwideMessage ||
+      (
+        drawingMode
+          ? "Add your own marks, then finish."
+          : "Tap other bubbles to discover more."
+      ),
+    width / 2,
+    height - 22
+  );
+}
+
+// ==================================================
+// WORLDWIDE — INPUT
+// ==================================================
+
+function worldwidePress(x, y) {
+  if (insideButton(x, y, worldwideBackButton)) {
+    if (
+      drawingMode &&
+      (localStrokes.length || currentStroke) &&
+      !confirm("Discard your unsaved contribution?")
+    ) {
+      return;
+    }
+
+    resetWorldwideEntry();
+    activeMode = "menu";
+
+    return;
+  }
+
+  if (
+    !window.shareConnected ||
+    worldwidePage === "loading"
+  ) {
+    return;
+  }
+
+  if (worldwidePage === "thanks") {
+    if (insideButton(x, y, leftButton)) {
+      worldwideRandomEntry();
+    } else if (insideButton(x, y, rightButton)) {
+      resetWorldwideEntry();
+      activeMode = "menu";
     }
 
     return;
   }
 
-  // TEMPORARY CREATOR input.
-  if (activeMode === "creator") {
-    if (handleToolControlPress(mouseX, mouseY)) return;
+  if (drawingMode) {
+    if (handleToolControlPress(x, y)) {
+      return;
+    }
 
-    if (
-      creatorBackButton &&
-      insideButton(mouseX, mouseY, creatorBackButton)
-    ) {
-      const hasUnsavedArtwork =
-        creatorStrokes.length > 0 ||
-        !!creatorCurrentStroke;
+    if (insideButton(x, y, rightButton)) {
+      worldwideFinish();
+      return;
+    }
 
+    if (insideButton(x, y, leftButton)) {
       if (
-        hasUnsavedArtwork &&
-        !confirm("Leave Creator mode without saving this artwork?")
+        (localStrokes.length || currentStroke) &&
+        !confirm("Discard your unsaved contribution?")
       ) {
         return;
       }
 
-      activeMode = "menu";
-      creatorStrokes = [];
-      creatorCurrentStroke = null;
-      creatorEraserMode = false;
+      drawingMode = false;
+      eraserMode = false;
+
+      localStrokes = [];
+      currentStroke = null;
+
       brushAdjustmentActive = false;
+      brushPermissionPending = false;
+
+      worldwidePage =
+        worldwideSelected ? "view" : "prompt";
+
+      worldwideMessage = "";
+
       return;
     }
 
-    if (
-      creatorSaveButton &&
-      insideButton(mouseX, mouseY, creatorSaveButton)
-    ) {
-      saveCreatorArtwork();
-      return;
-    }
-
-    if (
-      creatorClearButton &&
-      insideButton(mouseX, mouseY, creatorClearButton)
-    ) {
-      clearCreatorArtwork();
-      return;
-    }
-
-    if (insideDrawingCircle(mouseX, mouseY)) {
-      if (creatorEraserMode) {
-        eraseCreatorStrokesAt(mouseX, mouseY);
+    if (insideDrawingCircle(x, y)) {
+      if (eraserMode) {
+        eraseLocalStrokesAt(x, y);
         return;
       }
 
-      const settings = creatorToolSettings;
-
-      creatorCurrentStroke = {
-        color: settings.brushColor || WHITE,
-        weight: settings.brushSize || 4,
+      currentStroke = {
+        color: worldwideTools.brushColor,
+        weight: worldwideTools.brushSize,
         points: []
       };
 
-      addCreatorDrawingPoint(mouseX, mouseY);
+      addDrawingPoint(x, y);
+    }
+
+    return;
+  }
+
+  if (insideButton(x, y, leftButton)) {
+    worldwideStartDrawing();
+    return;
+  }
+
+  if (insideButton(x, y, rightButton)) {
+    worldwideOpenPrompt();
+    return;
+  }
+
+  if (insideButton(x, y, worldwidePromptButton)) {
+    worldwideLeavePrompt();
+    return;
+  }
+
+  // Artwork bubbles lead to other artworks.
+  // They do not increase the empty bubble counter.
+
+  for (
+    let i = worldwideBubbles.length - 1;
+    i >= 0;
+    i--
+  ) {
+    const b = worldwideBubbles[i];
+
+    if (
+      dist(x, y, b.x, b.y) <
+        b.size / 2 + 8
+    ) {
+      if (b.text) {
+        worldwideOpenPrompt(b.text);
+      } else {
+        worldwideOpenArtwork(b.id);
+      }
+
+      return;
+    }
+  }
+
+  // Only ordinary empty bubbles increase the counter.
+
+  for (
+    let i = waitingBubbles.length - 1;
+    i >= 0;
+    i--
+  ) {
+    const b = waitingBubbles[i];
+
+    if (
+      !b.popping &&
+      dist(x, y, b.x, b.y) <
+        b.size / 2 + 8
+    ) {
+      popWaitingBubble(b);
+      return;
+    }
+  }
+}
+
+// ==================================================
+// GENERAL INPUT
+// ==================================================
+
+function mousePressed() {
+  if (activeMode === "menu") {
+    if (
+      groupMenuButton &&
+      insideButton(
+        mouseX,
+        mouseY,
+        groupMenuButton
+      )
+    ) {
+      connectToShare();
+
+      activeMode = "group";
+
+      brushAdjustmentActive = false;
+      brushPermissionPending = false;
+
+      drawingMode = false;
+      eraserMode = false;
+
+      localStrokes = [];
+      currentStroke = null;
+
+      activeVersionPreview = null;
+
+      updateLayout();
+
+      bubblePopAnimations = [];
+
+      createWaitingBubbles();
+
+      return;
+    }
+
+    if (
+      worldwideMenuButton &&
+      insideButton(
+        mouseX,
+        mouseY,
+        worldwideMenuButton
+      )
+    ) {
+      connectToShare();
+
+      activeMode = "worldwide";
+
+      resetWorldwideEntry();
+      updateLayout();
+      createWaitingBubbles();
+
+      return;
     }
 
     return;
   }
 
   if (activeMode === "worldwide") {
-    if (handleToolControlPress(mouseX, mouseY)) return;
-
-    if (
-      worldwideBackButton &&
-      insideButton(mouseX, mouseY, worldwideBackButton)
-    ) {
-      activeMode = "menu";
-      brushAdjustmentActive = false;
-    }
-
+    worldwidePress(mouseX, mouseY);
     return;
   }
 
@@ -2592,7 +3445,9 @@ function mousePressed() {
 
   if (activeVersionPreview) return;
 
-  if (handleToolControlPress(mouseX, mouseY)) return;
+  if (handleToolControlPress(mouseX, mouseY)) {
+    return;
+  }
 
   if (
     !drawingMode &&
@@ -2600,33 +3455,44 @@ function mousePressed() {
     insideButton(mouseX, mouseY, modeButton)
   ) {
     activeMode = "menu";
+
     brushAdjustmentActive = false;
+    brushPermissionPending = false;
+
     return;
   }
 
   if (!window.shareConnected) return;
 
   if (!drawingMode) {
-    for (let i = versionBubbles.length - 1; i >= 0; i--) {
+    for (
+      let i = versionBubbles.length - 1;
+      i >= 0;
+      i--
+    ) {
       const b = versionBubbles[i];
 
       if (
         dist(mouseX, mouseY, b.x, b.y) <
-        b.size / 2 + 12
+          b.size / 2 + 12
       ) {
         openVersionPreview(b);
         return;
       }
     }
 
-    for (let i = waitingBubbles.length - 1; i >= 0; i--) {
+    for (
+      let i = waitingBubbles.length - 1;
+      i >= 0;
+      i--
+    ) {
       const b = waitingBubbles[i];
 
       if (b.popping) continue;
 
       if (
         dist(mouseX, mouseY, b.x, b.y) <
-        b.size / 2 + 12
+          b.size / 2 + 12
       ) {
         popWaitingBubble(b);
         return;
@@ -2635,13 +3501,20 @@ function mousePressed() {
   }
 
   if (insideButton(mouseX, mouseY, leftButton)) {
-    if (!drawingMode) startTurn();
+    if (!drawingMode) {
+      startTurn();
+    }
+
     return;
   }
 
   if (insideButton(mouseX, mouseY, rightButton)) {
-    if (drawingMode) finishTurn();
-    else passTurn();
+    if (drawingMode) {
+      finishTurn();
+    } else {
+      passTurn();
+    }
+
     return;
   }
 
@@ -2667,31 +3540,20 @@ function mousePressed() {
 }
 
 function mouseDragged() {
-  // TEMPORARY CREATOR drawing input.
-  if (activeMode === "creator") {
-    if (!insideDrawingCircle(mouseX, mouseY)) return;
-
-    if (creatorEraserMode) {
-      eraseCreatorStrokesAt(mouseX, mouseY);
-      return;
-    }
-
-    if (creatorCurrentStroke) {
-      addCreatorDrawingPoint(mouseX, mouseY);
-    }
-
-    return;
-  }
-
   if (
-    activeMode !== "group" ||
+    (
+      activeMode !== "group" &&
+      activeMode !== "worldwide"
+    ) ||
     !drawingMode ||
     activeVersionPreview
   ) {
     return;
   }
 
-  if (!insideDrawingCircle(mouseX, mouseY)) return;
+  if (!insideDrawingCircle(mouseX, mouseY)) {
+    return;
+  }
 
   if (eraserMode) {
     eraseLocalStrokesAt(mouseX, mouseY);
@@ -2704,19 +3566,6 @@ function mouseDragged() {
 }
 
 function mouseReleased() {
-  // TEMPORARY CREATOR stroke completion.
-  if (activeMode === "creator") {
-    if (
-      creatorCurrentStroke &&
-      creatorCurrentStroke.points.length > 0
-    ) {
-      creatorStrokes.push(creatorCurrentStroke);
-    }
-
-    creatorCurrentStroke = null;
-    return;
-  }
-
   if (currentStroke) {
     if (currentStroke.points.length > 0) {
       localStrokes.push(currentStroke);
@@ -2726,14 +3575,15 @@ function mouseReleased() {
   }
 }
 
-// --------------------------------------------------
-// DRAWING AND HIT-TEST HELPERS
-// --------------------------------------------------
+// ==================================================
+// DRAWING HELPERS
+// ==================================================
 
 function insideDrawingCircle(x, y) {
   return (
     canvasArea &&
-    dist(x, y, canvasArea.x, canvasArea.y) <= canvasArea.radius
+    dist(x, y, canvasArea.x, canvasArea.y) <=
+      canvasArea.radius
   );
 }
 
@@ -2751,7 +3601,8 @@ function addDrawingPoint(x, y) {
   if (!currentStroke || !canvasArea) return;
 
   const zoom = constrain(
-    Number(getActiveToolSettings().zoomLevel) || MAX_ZOOM,
+    Number(getActiveToolSettings().zoomLevel) ||
+      MAX_ZOOM,
     MIN_ZOOM,
     MAX_ZOOM
   );
@@ -2759,10 +3610,12 @@ function addDrawingPoint(x, y) {
   const baseDiameter = canvasArea.baseDiameter;
 
   const normalizedX =
-    (x - canvasArea.x) / (baseDiameter * zoom) + 0.5;
+    (x - canvasArea.x) /
+      (baseDiameter * zoom) + 0.5;
 
   const normalizedY =
-    (y - canvasArea.y) / (baseDiameter * zoom) + 0.5;
+    (y - canvasArea.y) /
+      (baseDiameter * zoom) + 0.5;
 
   currentStroke.points.push({
     x: normalizedX,
@@ -2770,86 +3623,17 @@ function addDrawingPoint(x, y) {
   });
 }
 
-// --------------------------------------------------
-// TURN SYSTEM
-// --------------------------------------------------
-
-function startTurn() {
-  if (!window.shareConnected) return;
-
-  drawingMode = true;
-  eraserMode = false;
-  localStrokes = [];
-  currentStroke = null;
-}
-
-function finishTurn() {
-  if (!window.shareConnected) return;
-
-  const group = getGroupState();
-  if (!group) return;
-
-  if (currentStroke && currentStroke.points.length > 0) {
-    localStrokes.push(currentStroke);
-  }
-
-  currentStroke = null;
-
-  const data = getSharedData();
-
-  if (localStrokes.length > 0) {
-    const nextVersion = data.version + 1;
-    const nextTurn = data.turnCount + 1;
-
-    const completedStrokes =
-      data.strokes.concat(localStrokes);
-
-    group.strokes = completedStrokes;
-    group.version = nextVersion;
-    group.lastAction = "edited";
-
-    const snapshot = {
-      id: "version-" + nextVersion + "-turn-" + nextTurn,
-      version: nextVersion,
-      turn: nextTurn,
-      zoomLevel: Number(group.zoomLevel) || MAX_ZOOM,
-      strokes: JSON.parse(JSON.stringify(completedStrokes))
-    };
-
-    group.versions = data.versions.concat([snapshot]);
-  } else {
-    group.lastAction = "passed";
-  }
-
-  group.turnCount = data.turnCount + 1;
-
-  drawingMode = false;
-  eraserMode = false;
-  localStrokes = [];
-  currentStroke = null;
-}
-
-function passTurn() {
-  if (!window.shareConnected) return;
-
-  const group = getGroupState();
-  if (!group) return;
-
-  const data = getSharedData();
-
-  group.lastAction = "passed";
-  group.turnCount = data.turnCount + 1;
-}
-
-// --------------------------------------------------
-// RESIZE
-// --------------------------------------------------
-
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+
   updateLayout();
 
-  if (activeMode === "group") {
+  if (
+    activeMode === "group" ||
+    activeMode === "worldwide"
+  ) {
     createWaitingBubbles();
   }
+
+  worldwideMediaKey = "";
 }
