@@ -1,20 +1,18 @@
+
 /*
-  BUBBLE POP — COLLABORATIVE PLAYTEST
+  BUBBLE POP — TWO-MODE APPLICATION
 
-  Shared drawing:
-  - Circular drawing canvas
-  - Shared between all phones
-  - Persistent room state
-  - Manual turn-taking
+  Modes:
+  - GROUP: Existing collaborative drawing prototype.
+  - WORLDWIDE: Placeholder for the upcoming collection experience.
 
-  Waiting interaction:
-  - Floating bubbles around the canvas
-  - Tap bubbles to pop them
-  - New bubbles appear as others pop
-  - Bubble popping is individual to each phone
+  Shared state:
+  - group: Group drawing and future Group features.
+  - worldwide: Future artwork collection and counter.
 
-  Room: a1-glade
-  App: bubble-pop
+  Existing Share room:
+  - Room: a1-glade
+  - App: bubble-pop
 */
 
 // --------------------------------------------------
@@ -26,10 +24,23 @@ const SHARE_ROOM = "a1-glade";
 const SHARE_APP = "bubble-pop";
 
 const INITIAL_SHARED_STATE = {
-  strokes: [],
-  version: 0,
-  turnCount: 0,
-  lastAction: "created"
+  group: {
+    strokes: [],
+    version: 0,
+    turnCount: 0,
+    lastAction: "created",
+    versions: [],
+    brushColor: "#FFFFFF",
+    brushSize: 4,
+    bubblePopCount: 0,
+    sessionActive: true
+  },
+
+  worldwide: {
+    artworks: [],
+    prompts: [],
+    bubblePopCount: 0
+  }
 };
 
 // --------------------------------------------------
@@ -48,7 +59,16 @@ const STROKE_WEIGHT = 4;
 const WAITING_BUBBLE_COUNT = 24;
 
 // --------------------------------------------------
-// LOCAL VARIABLES
+// APPLICATION STATE
+// --------------------------------------------------
+
+// Each phone chooses its own mode.
+// This selection is not shared with other participants.
+
+let activeMode = "menu";
+
+// --------------------------------------------------
+// GROUP LOCAL VARIABLES
 // --------------------------------------------------
 
 let drawingMode = false;
@@ -60,9 +80,24 @@ let canvasArea;
 
 let leftButton;
 let rightButton;
+let modeButton;
 
 let waitingBubbles = [];
 let bubblePopAnimations = [];
+
+// --------------------------------------------------
+// MENU VARIABLES
+// --------------------------------------------------
+
+let groupMenuButton;
+let worldwideMenuButton;
+let worldwideBackButton;
+
+// --------------------------------------------------
+// SHARED STATE INITIALIZATION
+// --------------------------------------------------
+
+let sharedStructureReady = false;
 
 // --------------------------------------------------
 // SETUP
@@ -102,7 +137,133 @@ function setup() {
 // --------------------------------------------------
 
 function shareReady() {
+  ensureSharedStructure();
+
   console.log("Bubble Pop connected.");
+}
+
+// --------------------------------------------------
+// SHARED STATE MIGRATION
+// --------------------------------------------------
+
+function ensureSharedStructure() {
+  const room = window.shared;
+
+  if (!room || typeof room !== "object") {
+    return false;
+  }
+
+  // Check whether this room still contains the old
+  // flat shared-state structure.
+
+  const legacyStrokes = Array.isArray(room.strokes)
+    ? room.strokes
+    : [];
+
+  const legacyVersion = Number(room.version) || 0;
+  const legacyTurnCount = Number(room.turnCount) || 0;
+  const legacyLastAction = room.lastAction || "created";
+
+  const legacyHasData =
+    legacyStrokes.length > 0 ||
+    legacyVersion > 0 ||
+    legacyTurnCount > 0 ||
+    legacyLastAction !== "created";
+
+  // Make sure the Group section exists.
+
+  if (!room.group || typeof room.group !== "object") {
+    room.group = {};
+  }
+
+  const group = room.group;
+
+  const groupHasData =
+    (Array.isArray(group.strokes) && group.strokes.length > 0) ||
+    (Number(group.version) || 0) > 0 ||
+    (Number(group.turnCount) || 0) > 0;
+
+  // If the old drawing exists but the new Group section
+  // is still empty, migrate the old drawing into Group.
+
+  if (legacyHasData && !groupHasData) {
+    group.strokes = legacyStrokes;
+    group.version = legacyVersion;
+    group.turnCount = legacyTurnCount;
+    group.lastAction = legacyLastAction;
+
+    console.log("Existing drawing migrated into Group.");
+  }
+
+  // Fill in any missing Group values.
+
+  if (!Array.isArray(group.strokes)) {
+    group.strokes = [];
+  }
+
+  if (!Array.isArray(group.versions)) {
+    group.versions = [];
+  }
+
+  if (typeof group.version !== "number") {
+    group.version = 0;
+  }
+
+  if (typeof group.turnCount !== "number") {
+    group.turnCount = 0;
+  }
+
+  if (!group.lastAction) {
+    group.lastAction = "created";
+  }
+
+  if (!group.brushColor) {
+    group.brushColor = "#FFFFFF";
+  }
+
+  if (typeof group.brushSize !== "number") {
+    group.brushSize = 4;
+  }
+
+  if (typeof group.bubblePopCount !== "number") {
+    group.bubblePopCount = 0;
+  }
+
+  if (typeof group.sessionActive !== "boolean") {
+    group.sessionActive = true;
+  }
+
+  // Make sure the Worldwide section exists.
+
+  if (!room.worldwide || typeof room.worldwide !== "object") {
+    room.worldwide = {};
+  }
+
+  const worldwide = room.worldwide;
+
+  if (!Array.isArray(worldwide.artworks)) {
+    worldwide.artworks = [];
+  }
+
+  if (!Array.isArray(worldwide.prompts)) {
+    worldwide.prompts = [];
+  }
+
+  if (typeof worldwide.bubblePopCount !== "number") {
+    worldwide.bubblePopCount = 0;
+  }
+
+  // Remove the old root-level fields after migration.
+  // The drawing now lives inside room.group.
+
+  delete room.strokes;
+  delete room.version;
+  delete room.turnCount;
+  delete room.lastAction;
+
+  sharedStructureReady = true;
+
+  return true;
 }
 
 // --------------------------------------------------
@@ -112,33 +273,257 @@ function shareReady() {
 function draw() {
   background(BACKGROUND);
 
-  updateLayout();
+  // Make sure the shared state is organized once
+  // the phone has connected to the room.
 
-  drawHeader();
-  drawCanvasCircle();
-
-  drawSharedArtwork();
-  drawLocalArtwork();
-
-  // Bubbles are individual interactions.
-  // They appear while someone is waiting.
-  if (!drawingMode) {
-    updateWaitingBubbles();
-    drawWaitingBubbles();
-    drawBubblePopAnimations();
+  if (
+    window.shareConnected &&
+    !sharedStructureReady
+  ) {
+    ensureSharedStructure();
   }
 
-  drawFooter();
+  // Opening screen.
+
+  if (activeMode === "menu") {
+    drawModeSelection();
+    return;
+  }
+
+  // Worldwide placeholder.
+  // Its actual experience will be developed later.
+
+  if (activeMode === "worldwide") {
+    drawWorldwidePlaceholder();
+    return;
+  }
+
+  // Existing Group experience.
+
+  if (activeMode === "group") {
+    updateLayout();
+
+    drawHeader();
+    drawCanvasCircle();
+
+    drawSharedArtwork();
+    drawLocalArtwork();
+
+    if (!drawingMode) {
+      updateWaitingBubbles();
+      drawWaitingBubbles();
+      drawBubblePopAnimations();
+    }
+
+    drawFooter();
+  }
 }
 
 // --------------------------------------------------
-// LAYOUT
+// OPENING SCREEN
+// --------------------------------------------------
+
+function drawModeSelection() {
+  const buttonWidth = min(width - 48, 360);
+  const buttonHeight = 100;
+  const gap = 18;
+
+  const x = (width - buttonWidth) / 2;
+
+  const totalHeight = buttonHeight * 2 + gap;
+  const startY = height / 2 - totalHeight / 2 + 30;
+
+  groupMenuButton = {
+    x: x,
+    y: startY,
+    w: buttonWidth,
+    h: buttonHeight
+  };
+
+  worldwideMenuButton = {
+    x: x,
+    y: startY + buttonHeight + gap,
+    w: buttonWidth,
+    h: buttonHeight
+  };
+
+  // Title.
+
+  noStroke();
+  fill(WHITE);
+
+  textAlign(CENTER, CENTER);
+  textSize(min(40, width * 0.1));
+
+  text("bubble pop", width / 2, startY - 105);
+
+  fill(MUTED);
+  textSize(14);
+
+  text(
+    "Choose your experience",
+    width / 2,
+    startY - 65
+  );
+
+  // Group option.
+
+  drawMenuCard(
+    groupMenuButton,
+    "GROUP",
+    "A shared artwork developed by a group."
+  );
+
+  // Worldwide option.
+
+  drawMenuCard(
+    worldwideMenuButton,
+    "WORLDWIDE",
+    "Discover drawings and prompts left by others."
+  );
+
+  // Connection status.
+
+  fill(MUTED);
+  textSize(11);
+  textAlign(CENTER, CENTER);
+
+  text(
+    window.shareConnected
+      ? "CONNECTED"
+      : "CONNECTING...",
+    width / 2,
+    height - 35
+  );
+}
+
+// --------------------------------------------------
+// MENU CARD
+// --------------------------------------------------
+
+function drawMenuCard(button, heading, description) {
+  push();
+
+  rectMode(CORNER);
+
+  stroke(110, 110, 110, 180);
+  strokeWeight(1);
+
+  fill(16, 16, 16);
+
+  rect(
+    button.x,
+    button.y,
+    button.w,
+    button.h,
+    14
+  );
+
+  noStroke();
+
+  fill(WHITE);
+  textAlign(CENTER, CENTER);
+  textSize(18);
+
+  text(
+    heading,
+    button.x + button.w / 2,
+    button.y + 35
+  );
+
+  fill(MUTED);
+  textSize(12);
+
+  text(
+    description,
+    button.x + button.w / 2,
+    button.y + 68
+  );
+
+  pop();
+}
+
+// --------------------------------------------------
+// WORLDWIDE PLACEHOLDER
+// --------------------------------------------------
+
+function drawWorldwidePlaceholder() {
+  noStroke();
+
+  fill(WHITE);
+  textAlign(CENTER, CENTER);
+  textSize(30);
+
+  text("WORLDWIDE", width / 2, height / 2 - 85);
+
+  fill(MUTED);
+  textSize(14);
+
+  text(
+    "The Worldwide experience will be built in a later step.",
+    width / 2,
+    height / 2 - 40,
+    width - 60,
+    60
+  );
+
+  worldwideBackButton = {
+    x: width / 2 - 115,
+    y: height / 2 + 35,
+    w: 230,
+    h: 48
+  };
+
+  drawMenuCardButton(
+    worldwideBackButton,
+    "BACK TO MODES"
+  );
+}
+
+// --------------------------------------------------
+// SIMPLE MENU BUTTON
+// --------------------------------------------------
+
+function drawMenuCardButton(button, label) {
+  push();
+
+  rectMode(CORNER);
+
+  stroke(BORDER);
+  strokeWeight(1);
+
+  fill(PAPER);
+
+  rect(
+    button.x,
+    button.y,
+    button.w,
+    button.h,
+    9
+  );
+
+  noStroke();
+  fill(WHITE);
+
+  textAlign(CENTER, CENTER);
+  textSize(13);
+
+  text(
+    label,
+    button.x + button.w / 2,
+    button.y + button.h / 2
+  );
+
+  pop();
+}
+
+// --------------------------------------------------
+// GROUP LAYOUT
 // --------------------------------------------------
 
 function updateLayout() {
   const areaTop = 125;
   const areaBottom = height - 125;
-
   const availableHeight = areaBottom - areaTop;
 
   const diameter = min(
@@ -173,10 +558,17 @@ function updateLayout() {
     w: buttonW,
     h: buttonH
   };
+
+  modeButton = {
+    x: width - 86,
+    y: 58,
+    w: 66,
+    h: 25
+  };
 }
 
 // --------------------------------------------------
-// HEADER
+// GROUP HEADER
 // --------------------------------------------------
 
 function drawHeader() {
@@ -210,6 +602,35 @@ function drawHeader() {
     text("CONNECTING...", width - 20, 25);
   }
 
+  // Return to the mode-selection screen.
+  // This button is hidden while someone is drawing.
+
+  if (!drawingMode) {
+    noFill();
+    stroke(BORDER);
+    strokeWeight(1);
+
+    rect(
+      modeButton.x,
+      modeButton.y,
+      modeButton.w,
+      modeButton.h,
+      6
+    );
+
+    noStroke();
+    fill(MUTED);
+
+    textAlign(CENTER, CENTER);
+    textSize(10);
+
+    text(
+      "MODES",
+      modeButton.x + modeButton.w / 2,
+      modeButton.y + modeButton.h / 2
+    );
+  }
+
   textAlign(LEFT, TOP);
   fill(MUTED);
   textSize(13);
@@ -229,7 +650,6 @@ function drawHeader() {
 function drawCanvasCircle() {
   push();
 
-  // Dark circular drawing surface.
   noStroke();
   fill(PAPER);
 
@@ -239,7 +659,6 @@ function drawCanvasCircle() {
     canvasArea.diameter
   );
 
-  // Outer border.
   noFill();
   stroke(BORDER);
   strokeWeight(1.2);
@@ -250,7 +669,6 @@ function drawCanvasCircle() {
     canvasArea.diameter
   );
 
-  // Subtle bubble-like highlight.
   stroke(255, 255, 255, 65);
   strokeWeight(2);
 
@@ -324,8 +742,8 @@ function drawStroke(strokeData) {
 
   push();
 
-  // Clip everything to the circular canvas.
   drawingContext.save();
+
   drawingContext.beginPath();
 
   drawingContext.arc(
@@ -356,7 +774,12 @@ function drawStroke(strokeData) {
     noStroke();
     fill(strokeData.color || STROKE_COLOR);
 
-    circle(px, py, strokeData.weight || STROKE_WEIGHT);
+    circle(
+      px,
+      py,
+      strokeData.weight || STROKE_WEIGHT
+    );
+
   } else {
     beginShape();
 
@@ -376,6 +799,7 @@ function drawStroke(strokeData) {
   }
 
   drawingContext.restore();
+
   pop();
 }
 
@@ -400,7 +824,6 @@ function makeWaitingBubble() {
 
   size = random(25, 55);
 
-  // Try to find a position outside the main circle.
   for (let attempt = 0; attempt < 100; attempt++) {
     x = random(18 + size / 2, width - 18 - size / 2);
     y = random(110 + size / 2, height - 115 - size / 2);
@@ -421,7 +844,6 @@ function makeWaitingBubble() {
     }
   }
 
-  // Fallback position if the screen is too small.
   if (!foundPosition) {
     x = random(width);
     y = random(height);
@@ -456,22 +878,18 @@ function updateWaitingBubbles() {
 
     if (b.popping) continue;
 
-    // Gentle upward movement.
     b.y -= b.speed;
 
-    // Gentle sideways movement.
     b.x += sin(frameCount * 0.7 + b.phase) * b.drift;
 
     b.rotation += b.rotationSpeed;
 
-    // Keep inside the screen horizontally.
     b.x = constrain(
       b.x,
       b.size / 2,
       width - b.size / 2
     );
 
-    // Avoid floating through the drawing circle.
     const distance = dist(
       b.x,
       b.y,
@@ -486,7 +904,6 @@ function updateWaitingBubbles() {
       b.y -= b.speed + 0.5;
     }
 
-    // Reappear at the bottom.
     if (b.y < -b.size) {
       waitingBubbles[i] = makeWaitingBubble();
       waitingBubbles[i].y = height + random(20, 100);
@@ -512,13 +929,11 @@ function drawWaitingBubble(b) {
   translate(b.x, b.y);
   rotate(b.rotation);
 
-  // Transparent dark interior.
   noStroke();
   fill(255, 255, 255, 8);
 
   circle(0, 0, b.size);
 
-  // Iridescent bubble edge.
   noFill();
   strokeWeight(2.2);
 
@@ -537,7 +952,6 @@ function drawWaitingBubble(b) {
   stroke(100, 255, 190, b.alpha);
   arc(0, 0, b.size, b.size, 120, 190);
 
-  // Main white reflection.
   noStroke();
   fill(255, 255, 255, 155);
 
@@ -600,7 +1014,6 @@ function drawBubblePopAnimations() {
       size
     );
 
-    // Small white particles.
     for (let j = 0; j < 5; j++) {
       const angle = j * 72;
       const distance = progress * animation.size * 0.55;
@@ -618,7 +1031,6 @@ function drawBubblePopAnimations() {
     if (progress >= 1) {
       bubblePopAnimations.splice(i, 1);
 
-      // Replace the popped bubble.
       const index = waitingBubbles.findIndex(
         b => b.popping &&
           dist(b.x, b.y, animation.x, animation.y) < 1
@@ -706,9 +1118,72 @@ function drawButton(button, label) {
 // --------------------------------------------------
 
 function mousePressed() {
+
+  // MODE SELECTION SCREEN.
+
+  if (activeMode === "menu") {
+
+    if (
+      groupMenuButton &&
+      insideButton(mouseX, mouseY, groupMenuButton)
+    ) {
+      activeMode = "group";
+
+      drawingMode = false;
+      localStrokes = [];
+      currentStroke = null;
+
+      updateLayout();
+      createWaitingBubbles();
+
+      return;
+    }
+
+    if (
+      worldwideMenuButton &&
+      insideButton(mouseX, mouseY, worldwideMenuButton)
+    ) {
+      activeMode = "worldwide";
+      return;
+    }
+
+    return;
+  }
+
+  // WORLDWIDE PLACEHOLDER.
+
+  if (activeMode === "worldwide") {
+
+    if (
+      worldwideBackButton &&
+      insideButton(mouseX, mouseY, worldwideBackButton)
+    ) {
+      activeMode = "menu";
+    }
+
+    return;
+  }
+
+  // GROUP MODE.
+
+  if (activeMode !== "group") return;
+
+  // Return to the mode selection screen.
+  // This is only available when not drawing.
+
+  if (
+    !drawingMode &&
+    modeButton &&
+    insideButton(mouseX, mouseY, modeButton)
+  ) {
+    activeMode = "menu";
+    return;
+  }
+
   if (!window.shareConnected) return;
 
-  // First check whether a waiting bubble was tapped.
+  // Check waiting bubbles first.
+
   if (!drawingMode) {
     for (let i = waitingBubbles.length - 1; i >= 0; i--) {
       const b = waitingBubbles[i];
@@ -725,7 +1200,8 @@ function mousePressed() {
     }
   }
 
-  // MY TURN
+  // MY TURN.
+
   if (insideButton(mouseX, mouseY, leftButton)) {
     if (!drawingMode) {
       startTurn();
@@ -734,7 +1210,8 @@ function mousePressed() {
     return;
   }
 
-  // FINISH / PASS
+  // FINISH / PASS.
+
   if (insideButton(mouseX, mouseY, rightButton)) {
     if (drawingMode) {
       finishTurn();
@@ -745,7 +1222,8 @@ function mousePressed() {
     return;
   }
 
-  // Start a stroke inside the circular canvas.
+  // Start a drawing stroke.
+
   if (
     drawingMode &&
     insideDrawingCircle(mouseX, mouseY)
@@ -761,6 +1239,8 @@ function mousePressed() {
 }
 
 function mouseDragged() {
+  if (activeMode !== "group") return;
+
   if (!drawingMode || !currentStroke) return;
 
   if (insideDrawingCircle(mouseX, mouseY)) {
@@ -795,6 +1275,7 @@ function insideDrawingCircle(x, y) {
 
 function insideButton(x, y, button) {
   return (
+    button &&
     x >= button.x &&
     x <= button.x + button.w &&
     y >= button.y &&
@@ -805,7 +1286,6 @@ function insideButton(x, y, button) {
 function addDrawingPoint(x, y) {
   if (!currentStroke) return;
 
-  // Store normalized coordinates relative to the circle.
   const normalizedX = constrain(
     (x - canvasArea.x) / canvasArea.diameter + 0.5,
     0,
@@ -839,6 +1319,10 @@ function startTurn() {
 function finishTurn() {
   if (!window.shareConnected) return;
 
+  const group = getGroupState();
+
+  if (!group) return;
+
   if (currentStroke && currentStroke.points.length > 0) {
     localStrokes.push(currentStroke);
   }
@@ -848,19 +1332,16 @@ function finishTurn() {
   const data = getSharedData();
 
   if (localStrokes.length > 0) {
-    window.shared.strokes =
-      data.strokes.concat(localStrokes);
+    group.strokes = data.strokes.concat(localStrokes);
 
-    window.shared.version =
-      data.version + 1;
+    group.version = data.version + 1;
 
-    window.shared.lastAction = "edited";
+    group.lastAction = "edited";
   } else {
-    window.shared.lastAction = "passed";
+    group.lastAction = "passed";
   }
 
-  window.shared.turnCount =
-    data.turnCount + 1;
+  group.turnCount = data.turnCount + 1;
 
   drawingMode = false;
   localStrokes = [];
@@ -870,29 +1351,46 @@ function finishTurn() {
 function passTurn() {
   if (!window.shareConnected) return;
 
+  const group = getGroupState();
+
+  if (!group) return;
+
   const data = getSharedData();
 
-  window.shared.lastAction = "passed";
-  window.shared.turnCount = data.turnCount + 1;
+  group.lastAction = "passed";
+  group.turnCount = data.turnCount + 1;
 }
 
 // --------------------------------------------------
-// SHARED DATA
+// SHARED DATA ACCESS
 // --------------------------------------------------
+
+function getGroupState() {
+  if (!window.shared || !window.shared.group) {
+    return null;
+  }
+
+  return window.shared.group;
+}
 
 function getSharedData() {
   const room = window.shared || {};
 
+  // During migration, fall back to the old root-level
+  // drawing if the Group section is not ready yet.
+
+  const group = room.group || room;
+
   return {
-    strokes: Array.isArray(room.strokes)
-      ? room.strokes
+    strokes: Array.isArray(group.strokes)
+      ? group.strokes
       : [],
 
-    version: Number(room.version) || 0,
+    version: Number(group.version) || 0,
 
-    turnCount: Number(room.turnCount) || 0,
+    turnCount: Number(group.turnCount) || 0,
 
-    lastAction: room.lastAction || "created"
+    lastAction: group.lastAction || "created"
   };
 }
 
@@ -903,8 +1401,8 @@ function getSharedData() {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 
-  updateLayout();
-
-  // Reposition the bubbles for the new screen size.
-  createWaitingBubbles();
+  if (activeMode === "group") {
+    updateLayout();
+    createWaitingBubbles();
+  }
 }
