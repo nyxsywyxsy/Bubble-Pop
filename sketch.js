@@ -1,18 +1,16 @@
 
 /*
   BUBBLE POP — TWO-MODE APPLICATION
-  BUILD VERSION: 0.2 — ZOOM CORRECTION
+  BUILD VERSION: 0.3 — ZOOM OUT WORKFLOW
 
   CURRENT PROJECT STATUS:
   - GROUP: shared collaborative drawing and turn-taking.
   - WORLDWIDE: working placeholder for randomized-media mode.
   - COLOURS: palette and colour selection working.
   - BRUSH SIZE: slider and tilt controls working.
-  - ZOOM: drawing zooms inside a fixed circular bubble.
-
-  IMPORTANT:
-  The bubble outline must remain stationary.
-  Zoom changes the drawing inside the bubble, not the bubble itself.
+  - ZOOM: starts at maximum zoom-in (250%).
+          Participants can zoom out to reveal more drawing space.
+          The bubble outline remains stationary.
 
   NEXT DEVELOPMENT:
   Continue building Group version history and Worldwide
@@ -41,7 +39,8 @@ const INITIAL_SHARED_STATE = {
     versions: [],
     brushColor: "#FFFFFF",
     brushSize: 4,
-    zoomLevel: 1,
+    zoomLevel: 2.5,
+    zoomSetupVersion: 1,
     bubblePopCount: 0,
     sessionActive: true
   },
@@ -50,7 +49,8 @@ const INITIAL_SHARED_STATE = {
     prompts: [],
     brushColor: "#FFFFFF",
     brushSize: 4,
-    zoomLevel: 1,
+    zoomLevel: 2.5,
+    zoomSetupVersion: 1,
     bubblePopCount: 0
   }
 };
@@ -80,10 +80,11 @@ const DRAWING_PALETTE = [
 const MIN_BRUSH_SIZE = 2;
 const MAX_BRUSH_SIZE = 16;
 
-// Zoom now goes below 1 so participants can zoom OUT.
+// Zoom starts at the maximum and moves down as participants zoom out.
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2.5;
 const ZOOM_STEP = 0.25;
+const ZOOM_SETUP_VERSION = 1;
 
 // --------------------------------------------------
 // LOCAL APPLICATION STATE
@@ -194,9 +195,22 @@ function ensureSharedStructure() {
   if (!group.lastAction) group.lastAction = "created";
   if (!group.brushColor) group.brushColor = "#FFFFFF";
   if (typeof group.brushSize !== "number") group.brushSize = 4;
-  if (typeof group.zoomLevel !== "number") group.zoomLevel = 1;
   if (typeof group.bubblePopCount !== "number") group.bubblePopCount = 0;
   if (typeof group.sessionActive !== "boolean") group.sessionActive = true;
+
+  // One-time update for existing rooms:
+  // set the starting zoom to maximum zoom-in.
+  // Once this marker is saved, later visits preserve the shared zoom.
+  if (group.zoomSetupVersion !== ZOOM_SETUP_VERSION) {
+    group.zoomLevel = MAX_ZOOM;
+    group.zoomSetupVersion = ZOOM_SETUP_VERSION;
+  }
+
+  if (typeof group.zoomLevel !== "number") {
+    group.zoomLevel = MAX_ZOOM;
+  }
+
+  group.zoomLevel = constrain(group.zoomLevel, MIN_ZOOM, MAX_ZOOM);
 
   if (!room.worldwide || typeof room.worldwide !== "object") {
     room.worldwide = {};
@@ -207,8 +221,23 @@ function ensureSharedStructure() {
   if (!Array.isArray(worldwide.prompts)) worldwide.prompts = [];
   if (!worldwide.brushColor) worldwide.brushColor = "#FFFFFF";
   if (typeof worldwide.brushSize !== "number") worldwide.brushSize = 4;
-  if (typeof worldwide.zoomLevel !== "number") worldwide.zoomLevel = 1;
   if (typeof worldwide.bubblePopCount !== "number") worldwide.bubblePopCount = 0;
+
+  // Apply the same one-time starting zoom to Worldwide.
+  if (worldwide.zoomSetupVersion !== ZOOM_SETUP_VERSION) {
+    worldwide.zoomLevel = MAX_ZOOM;
+    worldwide.zoomSetupVersion = ZOOM_SETUP_VERSION;
+  }
+
+  if (typeof worldwide.zoomLevel !== "number") {
+    worldwide.zoomLevel = MAX_ZOOM;
+  }
+
+  worldwide.zoomLevel = constrain(
+    worldwide.zoomLevel,
+    MIN_ZOOM,
+    MAX_ZOOM
+  );
 
   // Remove legacy root fields only after their values have been copied.
   delete room.strokes;
@@ -223,7 +252,7 @@ function ensureSharedStructure() {
 const fallbackToolSettings = {
   brushColor: "#FFFFFF",
   brushSize: 4,
-  zoomLevel: 1
+  zoomLevel: MAX_ZOOM
 };
 
 function getActiveToolSettings() {
@@ -432,7 +461,7 @@ function updateLayout() {
   const areaBottom = height - 245;
   const availableHeight = max(180, areaBottom - areaTop);
 
-  // The bubble size is now fixed and does not depend on zoom.
+  // The bubble size is fixed and does not depend on zoom.
   // Zoom only changes the drawing rendered inside this boundary.
   const baseDiameter = max(
     180,
@@ -630,7 +659,7 @@ function drawStroke(strokeData) {
 
   // Zoom affects only the drawing's scale inside the fixed bubble.
   const zoom = constrain(
-    Number(getActiveToolSettings().zoomLevel) || 1,
+    Number(getActiveToolSettings().zoomLevel) || MAX_ZOOM,
     MIN_ZOOM,
     MAX_ZOOM
   );
@@ -802,7 +831,7 @@ function drawSharedToolControls() {
   textAlign(CENTER, CENTER);
   textSize(10);
   text(
-    Math.round((settings.zoomLevel || 1) * 100) + "%",
+    Math.round((settings.zoomLevel || MAX_ZOOM) * 100) + "%",
     width - 63,
     height - 128
   );
@@ -878,7 +907,7 @@ function handleToolControlPress(x, y) {
   if (insideButton(x, y, zoomOutButton)) {
     settings.zoomLevel = max(
       MIN_ZOOM,
-      (Number(settings.zoomLevel) || 1) - ZOOM_STEP
+      (Number(settings.zoomLevel) || MAX_ZOOM) - ZOOM_STEP
     );
 
     return true;
@@ -888,7 +917,7 @@ function handleToolControlPress(x, y) {
   if (insideButton(x, y, zoomInButton)) {
     settings.zoomLevel = min(
       MAX_ZOOM,
-      (Number(settings.zoomLevel) || 1) + ZOOM_STEP
+      (Number(settings.zoomLevel) || MAX_ZOOM) + ZOOM_STEP
     );
 
     return true;
@@ -1338,7 +1367,7 @@ function addDrawingPoint(x, y) {
   if (!currentStroke || !canvasArea) return;
 
   const zoom = constrain(
-    Number(getActiveToolSettings().zoomLevel) || 1,
+    Number(getActiveToolSettings().zoomLevel) || MAX_ZOOM,
     MIN_ZOOM,
     MAX_ZOOM
   );
