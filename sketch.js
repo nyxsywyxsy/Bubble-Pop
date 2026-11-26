@@ -1,7 +1,7 @@
 
 /*
   BUBBLE POP — TWO-MODE APPLICATION
-  BUILD VERSION: 0.5 — SHAKE-TO-POP VERSION PREVIEW
+  BUILD VERSION: 0.6 — TURN-ONLY ZOOM + LOCAL ERASER
 
   GROUP:
   - Shared collaborative drawing and turn-taking.
@@ -10,13 +10,14 @@
   - Each version bubble contains a miniature of its drawing.
   - Tap to expand a local preview; shake to pop it.
 
-  WORLDWIDE:
-  - Placeholder for future randomized-media mode.
-
   DRAWING:
   - Shared colour palette and brush-size settings.
   - Tilt controls brush size.
-  - Zoom starts at 250% and can zoom out to 50%.
+  - Zoom can only be changed during your turn.
+  - Eraser removes only your own unsaved strokes.
+
+  WORLDWIDE:
+  - Placeholder for future randomized-media mode.
 */
 
 const SHARE_HOST = "https://p5-phone-share.npuckett.workers.dev";
@@ -94,6 +95,7 @@ const VERSION_SHAKE_THRESHOLD = 40;
 
 let activeMode = "menu";
 let drawingMode = false;
+let eraserMode = false;
 
 let localStrokes = [];
 let currentStroke = null;
@@ -119,6 +121,7 @@ let lastVersionShake = 0;
 let paletteButtons = [];
 let brushSizeButton = null;
 let brushSizeTrack = null;
+let eraserButton = null;
 let zoomOutButton = null;
 let zoomInButton = null;
 
@@ -139,7 +142,6 @@ function setup() {
 
   lockGestures();
 
-  // Enable motion sensors for tilt and shake interactions.
   enableGyroTap("Tap to enable motion sensors");
   setShakeThreshold(VERSION_SHAKE_THRESHOLD);
 
@@ -340,6 +342,10 @@ function draw() {
     drawSharedArtwork();
     drawLocalArtwork();
 
+    if (drawingMode && eraserMode) {
+      drawEraserCursor();
+    }
+
     if (!drawingMode && !activeVersionPreview) {
       updateWaitingBubbles();
       drawWaitingBubbles();
@@ -352,7 +358,6 @@ function draw() {
     drawSharedToolControls();
     drawFooter();
 
-    // The preview is drawn last, above all interface elements.
     drawVersionPreview();
   }
 }
@@ -571,29 +576,37 @@ function updateLayout() {
     });
   }
 
+  // Leave space on the right for the eraser and zoom buttons.
   brushSizeButton = {
     x: 18,
     y: height - 174,
-    w: min(width - 150, 210),
+    w: min(width - 190, 210),
     h: 32
   };
 
   brushSizeTrack = {
     x: 18,
     y: height - 129,
-    w: min(width - 150, 210),
+    w: min(width - 190, 210),
     h: 7
   };
 
+  eraserButton = {
+    x: width - 153,
+    y: height - 174,
+    w: 42,
+    h: 32
+  };
+
   zoomOutButton = {
-    x: width - 105,
+    x: width - 103,
     y: height - 174,
     w: 36,
     h: 32
   };
 
   zoomInButton = {
-    x: width - 60,
+    x: width - 58,
     y: height - 174,
     w: 36,
     h: 32
@@ -884,30 +897,71 @@ function drawSharedToolControls() {
     brushSizeTrack.y + 17
   );
 
-  drawSmallControlButton(zoomOutButton, "−");
-  drawSmallControlButton(zoomInButton, "+");
+  // The eraser is available only during a Group turn.
+  if (activeMode === "group" && drawingMode) {
+    drawEraserButton();
+  }
 
-  fill(MUTED);
+  // Zoom is locked while waiting for another participant's turn.
+  const zoomAllowed =
+    activeMode !== "group" || drawingMode;
+
+  drawZoomButton(zoomOutButton, "−", zoomAllowed);
+  drawZoomButton(zoomInButton, "+", zoomAllowed);
+
+  fill(zoomAllowed ? MUTED : "#666666");
   textAlign(CENTER, CENTER);
   textSize(10);
+
   text(
-    Math.round((settings.zoomLevel || MAX_ZOOM) * 100) + "%",
+    zoomAllowed
+      ? Math.round((settings.zoomLevel || MAX_ZOOM) * 100) + "%"
+      : "TURN ONLY",
     width - 63,
     height - 128
   );
 }
 
-function drawSmallControlButton(button, label) {
+function drawEraserButton() {
   push();
 
   rectMode(CORNER);
-  stroke(BORDER);
+  stroke(eraserMode ? "#FFE66D" : BORDER);
+  strokeWeight(eraserMode ? 2 : 1);
+  fill(eraserMode ? "#29251A" : PAPER);
+
+  rect(
+    eraserButton.x,
+    eraserButton.y,
+    eraserButton.w,
+    eraserButton.h,
+    7
+  );
+
+  noStroke();
+  fill(eraserMode ? "#FFE66D" : WHITE);
+  textAlign(CENTER, CENTER);
+  textSize(11);
+  text(
+    eraserMode ? "ON" : "ER",
+    eraserButton.x + eraserButton.w / 2,
+    eraserButton.y + eraserButton.h / 2
+  );
+
+  pop();
+}
+
+function drawZoomButton(button, label, enabled) {
+  push();
+
+  rectMode(CORNER);
+  stroke(enabled ? BORDER : "#333333");
   strokeWeight(1);
-  fill(PAPER);
+  fill(enabled ? PAPER : "#080808");
   rect(button.x, button.y, button.w, button.h, 7);
 
   noStroke();
-  fill(WHITE);
+  fill(enabled ? WHITE : "#555555");
   textAlign(CENTER, CENTER);
   textSize(20);
   text(
@@ -965,19 +1019,46 @@ function handleToolControlPress(x, y) {
     return true;
   }
 
+  // Toggle the local eraser during a Group turn.
+  if (
+    activeMode === "group" &&
+    drawingMode &&
+    insideButton(x, y, eraserButton)
+  ) {
+    if (currentStroke && currentStroke.points.length > 0) {
+      localStrokes.push(currentStroke);
+    }
+
+    currentStroke = null;
+    eraserMode = !eraserMode;
+    brushAdjustmentActive = false;
+
+    return true;
+  }
+
+  // Group participants cannot change zoom while waiting.
+  const zoomAllowed =
+    activeMode !== "group" || drawingMode;
+
   if (insideButton(x, y, zoomOutButton)) {
-    settings.zoomLevel = max(
-      MIN_ZOOM,
-      (Number(settings.zoomLevel) || MAX_ZOOM) - ZOOM_STEP
-    );
+    if (zoomAllowed) {
+      settings.zoomLevel = max(
+        MIN_ZOOM,
+        (Number(settings.zoomLevel) || MAX_ZOOM) - ZOOM_STEP
+      );
+    }
+
     return true;
   }
 
   if (insideButton(x, y, zoomInButton)) {
-    settings.zoomLevel = min(
-      MAX_ZOOM,
-      (Number(settings.zoomLevel) || MAX_ZOOM) + ZOOM_STEP
-    );
+    if (zoomAllowed) {
+      settings.zoomLevel = min(
+        MAX_ZOOM,
+        (Number(settings.zoomLevel) || MAX_ZOOM) + ZOOM_STEP
+      );
+    }
+
     return true;
   }
 
@@ -1023,6 +1104,124 @@ function userSetupComplete() {
     brushAdjustmentActive = true;
     tiltBaseline = rotationY;
   }
+}
+
+// --------------------------------------------------
+// LOCAL ERASER
+// --------------------------------------------------
+
+// Eraser radius is based on the current brush size.
+function getEraserRadius() {
+  const settings = getActiveToolSettings();
+  return max(12, (Number(settings.brushSize) || 4) * 2.5);
+}
+
+// Convert a saved normalized point into its current screen position.
+function getStrokeScreenPoint(point) {
+  const zoom = constrain(
+    Number(getActiveToolSettings().zoomLevel) || MAX_ZOOM,
+    MIN_ZOOM,
+    MAX_ZOOM
+  );
+
+  return {
+    x: canvasArea.x +
+      (point.x - 0.5) * canvasArea.baseDiameter * zoom,
+    y: canvasArea.y +
+      (point.y - 0.5) * canvasArea.baseDiameter * zoom
+  };
+}
+
+// Distance from a point to a line segment.
+function distanceToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+
+  if (dx === 0 && dy === 0) {
+    return dist(px, py, ax, ay);
+  }
+
+  const t = constrain(
+    ((px - ax) * dx + (py - ay) * dy) /
+    (dx * dx + dy * dy),
+    0,
+    1
+  );
+
+  const closestX = ax + t * dx;
+  const closestY = ay + t * dy;
+
+  return dist(px, py, closestX, closestY);
+}
+
+// Check whether an eraser position touches a particular stroke.
+function strokeTouchesEraser(strokeData, x, y) {
+  if (
+    !strokeData ||
+    !Array.isArray(strokeData.points) ||
+    strokeData.points.length === 0
+  ) {
+    return false;
+  }
+
+  const radius =
+    getEraserRadius() + (Number(strokeData.weight) || 4) / 2;
+
+  const points = strokeData.points;
+
+  if (points.length === 1) {
+    const point = getStrokeScreenPoint(points[0]);
+    return dist(x, y, point.x, point.y) <= radius;
+  }
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = getStrokeScreenPoint(points[i]);
+    const b = getStrokeScreenPoint(points[i + 1]);
+
+    if (
+      distanceToSegment(
+        x, y,
+        a.x, a.y,
+        b.x, b.y
+      ) <= radius
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Only localStrokes are checked. Shared strokes are never modified.
+function eraseLocalStrokesAt(x, y) {
+  if (!drawingMode || !eraserMode) return;
+
+  for (let i = localStrokes.length - 1; i >= 0; i--) {
+    if (strokeTouchesEraser(localStrokes[i], x, y)) {
+      localStrokes.splice(i, 1);
+    }
+  }
+
+  // Also allow removal of an unfinished local stroke.
+  if (
+    currentStroke &&
+    strokeTouchesEraser(currentStroke, x, y)
+  ) {
+    currentStroke = null;
+  }
+}
+
+function drawEraserCursor() {
+  if (!insideDrawingCircle(mouseX, mouseY)) return;
+
+  noFill();
+  stroke(255, 230, 109, 210);
+  strokeWeight(1.5);
+  circle(
+    mouseX,
+    mouseY,
+    getEraserRadius() * 2
+  );
 }
 
 // --------------------------------------------------
@@ -1297,7 +1496,6 @@ function drawVersionBubbles() {
   }
 }
 
-// A floating version bubble now contains a miniature of its drawing.
 function drawVersionBubble(b) {
   const drawingDiameter = b.size * 0.66;
 
@@ -1309,12 +1507,10 @@ function drawVersionBubble(b) {
     baseDiameter: drawingDiameter
   };
 
-  // Bubble interior.
   noStroke();
   fill(12, 18, 25, 220);
   circle(b.x, b.y, b.size * 0.82);
 
-  // Draw the saved artwork inside the small circular preview.
   const snapshot = b.snapshot;
 
   if (snapshot && Array.isArray(snapshot.strokes)) {
@@ -1327,7 +1523,6 @@ function drawVersionBubble(b) {
     }
   }
 
-  // Outer iridescent edge.
   push();
 
   translate(b.x, b.y);
@@ -1357,7 +1552,6 @@ function drawVersionBubble(b) {
 
   pop();
 
-  // Inner preview border.
   noFill();
   stroke(255, 255, 255, 125);
   strokeWeight(1);
@@ -1377,7 +1571,6 @@ function openVersionPreview(bubble) {
     versionBubbles.splice(index, 1);
   }
 
-  // Capture and blur the background once, rather than every frame.
   const blurredBackground = get();
   blurredBackground.filter(BLUR, 2);
 
@@ -1400,12 +1593,10 @@ function drawVersionPreview() {
   const preview = activeVersionPreview;
   const elapsed = millis() - preview.startTime;
 
-  // Reuse the captured blurred background.
   if (preview.background) {
     image(preview.background, 0, 0, width, height);
   }
 
-  // Dim the background behind the preview.
   noStroke();
   fill(0, 185);
   rect(0, 0, width, height);
@@ -1422,7 +1613,6 @@ function drawVersionPreview() {
     1
   );
 
-  // Ease-out cubic expansion.
   const easedExpansion =
     1 - pow(1 - expandProgress, 3);
 
@@ -1446,7 +1636,6 @@ function drawVersionPreview() {
 
   let alpha = 255;
 
-  // Only shrink and fade after the participant shakes the phone.
   if (preview.popping) {
     const popProgress = constrain(
       (millis() - preview.popStartTime) /
@@ -1478,16 +1667,13 @@ function drawVersionPreview() {
     baseDiameter: drawingDiameter
   };
 
-  // Bubble body.
   noStroke();
   fill(8, 18, 28, 245 * alpha / 255);
   circle(previewX, previewY, previewSize);
 
-  // Dark drawing surface.
   fill(16, 16, 16, 245 * alpha / 255);
   circle(previewX, previewY, drawingDiameter);
 
-  // Draw the selected historical snapshot.
   const snapshot = preview.snapshot;
 
   if (snapshot && Array.isArray(snapshot.strokes)) {
@@ -1500,7 +1686,6 @@ function drawVersionPreview() {
     }
   }
 
-  // Iridescent outer bubble edge.
   noFill();
   strokeWeight(3);
 
@@ -1519,13 +1704,11 @@ function drawVersionPreview() {
   stroke(255, 230, 109, alpha);
   arc(previewX, previewY, previewSize, previewSize, 120, 190);
 
-  // Inner drawing border.
   noFill();
   stroke(255, 255, 255, 170 * alpha / 255);
   strokeWeight(1.5);
   circle(previewX, previewY, drawingDiameter);
 
-  // Curved version label appears after expansion.
   if (
     expandProgress >= 0.92 &&
     !preview.popping
@@ -1558,7 +1741,6 @@ function drawVersionPreview() {
   }
 }
 
-// Place individual letters along the upper arc of the bubble.
 function drawCurvedVersionLabel(label, x, y, radius, alpha) {
   push();
 
@@ -1597,8 +1779,6 @@ function drawCurvedVersionLabel(label, x, y, radius, alpha) {
 
     push();
     translate(letterX, letterY);
-
-    // Rotate each character to follow the curve.
     rotate(angle + 90);
     text(character, 0, 0);
     pop();
@@ -1609,7 +1789,6 @@ function drawCurvedVersionLabel(label, x, y, radius, alpha) {
   pop();
 }
 
-// Create droplets when the preview is shaken.
 function createVersionPreviewDroplets(x, y, size) {
   const droplets = [];
 
@@ -1648,10 +1827,8 @@ function drawVersionPreviewPop(preview) {
   const centerY = preview.y;
   const baseSize = preview.startSize;
 
-  // White splash streaks.
   for (let i = 0; i < 14; i++) {
     const angle = i * (360 / 14) + sin(i * 41) * 12;
-
     const delay = (i % 4) * 0.035;
 
     const splashProgress = constrain(
@@ -1680,7 +1857,6 @@ function drawVersionPreviewPop(preview) {
     line(x1, y1, x2, y2);
   }
 
-  // Coloured splash streaks.
   const splashColours = [
     [0, 220, 255],
     [170, 80, 255],
@@ -1724,14 +1900,12 @@ function drawVersionPreviewPop(preview) {
     );
   }
 
-  // Central flash.
   noStroke();
   fill(255, 255, 255, 180 * (1 - progress));
 
   const flashSize = baseSize * 0.2 * eased;
   circle(centerX, centerY, flashSize);
 
-  // Moving droplets.
   for (const d of preview.droplets) {
     d.x += d.vx;
     d.y += d.vy;
@@ -1766,7 +1940,6 @@ function drawVersionPreviewPop(preview) {
   }
 }
 
-// Shake callback. Only works when a version preview is open.
 function deviceShaken() {
   if (
     activeMode !== "group" ||
@@ -1778,7 +1951,6 @@ function deviceShaken() {
 
   const preview = activeVersionPreview;
 
-  // Do not allow the preview to pop before it has expanded.
   if (
     millis() - preview.startTime <
     VERSION_PREVIEW_EXPAND_TIME
@@ -1786,7 +1958,6 @@ function deviceShaken() {
     return;
   }
 
-  // Prevent repeated shake events from triggering multiple pops.
   if (
     millis() - lastVersionShake <
     VERSION_PREVIEW_SHAKE_COOLDOWN
@@ -1823,7 +1994,9 @@ function drawFooter() {
 
   text(
     drawingMode
-      ? "Add to the drawing, then finish your turn."
+      ? (eraserMode
+          ? "Erasing your own strokes. Tap ER to draw again."
+          : "Add to the drawing, then finish your turn.")
       : "Tap the floating bubbles while you wait.",
     width / 2,
     height - 22
@@ -1861,6 +2034,7 @@ function mousePressed() {
 
       activeMode = "group";
       drawingMode = false;
+      eraserMode = false;
       localStrokes = [];
       currentStroke = null;
 
@@ -1897,7 +2071,6 @@ function mousePressed() {
 
   if (activeMode !== "group") return;
 
-  // The preview blocks taps to the interface underneath it.
   if (activeVersionPreview) return;
 
   if (handleToolControlPress(mouseX, mouseY)) return;
@@ -1915,7 +2088,6 @@ function mousePressed() {
   if (!window.shareConnected) return;
 
   if (!drawingMode) {
-    // Version bubbles are checked before ordinary bubbles.
     for (let i = versionBubbles.length - 1; i >= 0; i--) {
       const b = versionBubbles[i];
 
@@ -1958,6 +2130,11 @@ function mousePressed() {
     drawingMode &&
     insideDrawingCircle(mouseX, mouseY)
   ) {
+    if (eraserMode) {
+      eraseLocalStrokesAt(mouseX, mouseY);
+      return;
+    }
+
     const settings = getActiveToolSettings();
 
     currentStroke = {
@@ -1974,13 +2151,19 @@ function mouseDragged() {
   if (
     activeMode !== "group" ||
     !drawingMode ||
-    !currentStroke ||
     activeVersionPreview
   ) {
     return;
   }
 
-  if (insideDrawingCircle(mouseX, mouseY)) {
+  if (!insideDrawingCircle(mouseX, mouseY)) return;
+
+  if (eraserMode) {
+    eraseLocalStrokesAt(mouseX, mouseY);
+    return;
+  }
+
+  if (currentStroke) {
     addDrawingPoint(mouseX, mouseY);
   }
 }
@@ -2047,6 +2230,7 @@ function startTurn() {
   if (!window.shareConnected) return;
 
   drawingMode = true;
+  eraserMode = false;
   localStrokes = [];
   currentStroke = null;
 }
@@ -2076,7 +2260,6 @@ function finishTurn() {
     group.version = nextVersion;
     group.lastAction = "edited";
 
-    // Save an independent copy of the completed drawing.
     const snapshot = {
       id: "version-" + nextVersion + "-turn-" + nextTurn,
       version: nextVersion,
@@ -2093,6 +2276,7 @@ function finishTurn() {
   group.turnCount = data.turnCount + 1;
 
   drawingMode = false;
+  eraserMode = false;
   localStrokes = [];
   currentStroke = null;
 }
