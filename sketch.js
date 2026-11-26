@@ -1,20 +1,20 @@
-
 /*
   BUBBLE POP — TWO-MODE APPLICATION
-  BUILD VERSION: 0.3 — ZOOM OUT WORKFLOW
+  BUILD VERSION: 0.4 — GROUP VERSION HISTORY
 
-  CURRENT PROJECT STATUS:
-  - GROUP: shared collaborative drawing and turn-taking.
-  - WORLDWIDE: working placeholder for randomized-media mode.
-  - COLOURS: palette and colour selection working.
-  - BRUSH SIZE: slider and tilt controls working.
-  - ZOOM: starts at maximum zoom-in (250%).
-          Participants can zoom out to reveal more drawing space.
-          The bubble outline remains stationary.
+  GROUP:
+  - Shared collaborative drawing and turn-taking.
+  - Completed drawings are saved as numbered snapshots.
+  - Snapshots appear as floating version bubbles.
+  - Popping a version bubble opens a temporary local preview.
 
-  NEXT DEVELOPMENT:
-  Continue building Group version history and Worldwide
-  randomized media without changing the working colour or tilt features.
+  WORLDWIDE:
+  - Placeholder for the future randomized-media mode.
+
+  DRAWING:
+  - Shared colour palette and brush-size settings.
+  - Tilt controls brush size.
+  - Zoom starts at 250% and can zoom out to 50%.
 
   Uses the existing p5-phone Share room:
   host: p5-phone-share.npuckett.workers.dev
@@ -80,37 +80,55 @@ const DRAWING_PALETTE = [
 const MIN_BRUSH_SIZE = 2;
 const MAX_BRUSH_SIZE = 16;
 
-// Zoom starts at the maximum and moves down as participants zoom out.
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2.5;
 const ZOOM_STEP = 0.25;
 const ZOOM_SETUP_VERSION = 1;
 
+// Version bubble and preview settings.
+const VERSION_BUBBLE_MIN_SIZE = 58;
+const VERSION_BUBBLE_MAX_SIZE = 76;
+const VERSION_BUBBLE_SPEED_MIN = 0.35;
+const VERSION_BUBBLE_SPEED_MAX = 0.75;
+
+const VERSION_PREVIEW_EXPAND_TIME = 400;
+const VERSION_PREVIEW_HOLD_TIME = 1800;
+const VERSION_PREVIEW_POP_TIME = 400;
+
 // --------------------------------------------------
 // LOCAL APPLICATION STATE
 // --------------------------------------------------
 
-let activeMode = "menu"; // menu, group, worldwide
+let activeMode = "menu";
 let drawingMode = false;
+
 let localStrokes = [];
 let currentStroke = null;
 let canvasArea = null;
+
 let leftButton = null;
 let rightButton = null;
 let modeButton = null;
 let groupMenuButton = null;
 let worldwideMenuButton = null;
 let worldwideBackButton = null;
+
 let waitingBubbles = [];
 let bubblePopAnimations = [];
+
 let sharedStructureReady = false;
 
-// Tool controls are local hit areas; their settings are shared per mode.
+// Version bubbles and previews are local to each participant.
+let versionBubbles = [];
+let seenVersionIds = new Set();
+let activeVersionPreview = null;
+
 let paletteButtons = [];
 let brushSizeButton = null;
 let brushSizeTrack = null;
 let zoomOutButton = null;
 let zoomInButton = null;
+
 let brushAdjustmentActive = false;
 let brushPermissionPending = false;
 let tiltBaseline = 0;
@@ -125,7 +143,6 @@ function setup() {
   textFont("Arial");
   angleMode(DEGREES);
 
-  // Prevent browser gestures from interrupting drawing on phones.
   lockGestures();
 
   shareSetup({
@@ -137,8 +154,6 @@ function setup() {
     keep: true
   });
 
-  // Desktop QR remains available. Joining happens when a participant
-  // chooses GROUP or WORLDWIDE, not through a separate join overlay.
   showDesktopQr();
 
   updateLayout();
@@ -152,7 +167,6 @@ function shareReady() {
 
 function connectToShare() {
   if (!window.shareConnected) {
-    // p5-phone requires shareConnect() to run from a user gesture.
     shareConnect();
   }
 }
@@ -165,16 +179,26 @@ function ensureSharedStructure() {
   const room = window.shared;
   if (!room || typeof room !== "object") return false;
 
-  // Preserve the original flat Group data if an older room is loaded.
-  const legacyStrokes = Array.isArray(room.strokes) ? room.strokes : [];
+  // Preserve original flat Group data if an older room is loaded.
+  const legacyStrokes = Array.isArray(room.strokes)
+    ? room.strokes
+    : [];
+
   const legacyVersion = Number(room.version) || 0;
   const legacyTurnCount = Number(room.turnCount) || 0;
   const legacyLastAction = room.lastAction || "created";
-  const legacyHasData = legacyStrokes.length > 0 ||
-    legacyVersion > 0 || legacyTurnCount > 0;
 
-  if (!room.group || typeof room.group !== "object") room.group = {};
+  const legacyHasData =
+    legacyStrokes.length > 0 ||
+    legacyVersion > 0 ||
+    legacyTurnCount > 0;
+
+  if (!room.group || typeof room.group !== "object") {
+    room.group = {};
+  }
+
   const group = room.group;
+
   const groupHasData =
     (Array.isArray(group.strokes) && group.strokes.length > 0) ||
     (Number(group.version) || 0) > 0 ||
@@ -185,22 +209,32 @@ function ensureSharedStructure() {
     group.version = legacyVersion;
     group.turnCount = legacyTurnCount;
     group.lastAction = legacyLastAction;
+
     console.log("Existing drawing migrated into Group.");
   }
 
   if (!Array.isArray(group.strokes)) group.strokes = [];
   if (!Array.isArray(group.versions)) group.versions = [];
+
   if (typeof group.version !== "number") group.version = 0;
   if (typeof group.turnCount !== "number") group.turnCount = 0;
+
   if (!group.lastAction) group.lastAction = "created";
   if (!group.brushColor) group.brushColor = "#FFFFFF";
-  if (typeof group.brushSize !== "number") group.brushSize = 4;
-  if (typeof group.bubblePopCount !== "number") group.bubblePopCount = 0;
-  if (typeof group.sessionActive !== "boolean") group.sessionActive = true;
 
-  // One-time update for existing rooms:
-  // set the starting zoom to maximum zoom-in.
-  // Once this marker is saved, later visits preserve the shared zoom.
+  if (typeof group.brushSize !== "number") {
+    group.brushSize = 4;
+  }
+
+  if (typeof group.bubblePopCount !== "number") {
+    group.bubblePopCount = 0;
+  }
+
+  if (typeof group.sessionActive !== "boolean") {
+    group.sessionActive = true;
+  }
+
+  // One-time zoom setup for existing rooms.
   if (group.zoomSetupVersion !== ZOOM_SETUP_VERSION) {
     group.zoomLevel = MAX_ZOOM;
     group.zoomSetupVersion = ZOOM_SETUP_VERSION;
@@ -210,20 +244,38 @@ function ensureSharedStructure() {
     group.zoomLevel = MAX_ZOOM;
   }
 
-  group.zoomLevel = constrain(group.zoomLevel, MIN_ZOOM, MAX_ZOOM);
+  group.zoomLevel = constrain(
+    group.zoomLevel,
+    MIN_ZOOM,
+    MAX_ZOOM
+  );
 
   if (!room.worldwide || typeof room.worldwide !== "object") {
     room.worldwide = {};
   }
 
   const worldwide = room.worldwide;
-  if (!Array.isArray(worldwide.artworks)) worldwide.artworks = [];
-  if (!Array.isArray(worldwide.prompts)) worldwide.prompts = [];
-  if (!worldwide.brushColor) worldwide.brushColor = "#FFFFFF";
-  if (typeof worldwide.brushSize !== "number") worldwide.brushSize = 4;
-  if (typeof worldwide.bubblePopCount !== "number") worldwide.bubblePopCount = 0;
 
-  // Apply the same one-time starting zoom to Worldwide.
+  if (!Array.isArray(worldwide.artworks)) {
+    worldwide.artworks = [];
+  }
+
+  if (!Array.isArray(worldwide.prompts)) {
+    worldwide.prompts = [];
+  }
+
+  if (!worldwide.brushColor) {
+    worldwide.brushColor = "#FFFFFF";
+  }
+
+  if (typeof worldwide.brushSize !== "number") {
+    worldwide.brushSize = 4;
+  }
+
+  if (typeof worldwide.bubblePopCount !== "number") {
+    worldwide.bubblePopCount = 0;
+  }
+
   if (worldwide.zoomSetupVersion !== ZOOM_SETUP_VERSION) {
     worldwide.zoomLevel = MAX_ZOOM;
     worldwide.zoomSetupVersion = ZOOM_SETUP_VERSION;
@@ -239,7 +291,7 @@ function ensureSharedStructure() {
     MAX_ZOOM
   );
 
-  // Remove legacy root fields only after their values have been copied.
+  // Remove legacy root fields after migration.
   delete room.strokes;
   delete room.version;
   delete room.turnCount;
@@ -257,8 +309,13 @@ const fallbackToolSettings = {
 
 function getActiveToolSettings() {
   if (!window.shared) return fallbackToolSettings;
-  const key = activeMode === "worldwide" ? "worldwide" : "group";
+
+  const key = activeMode === "worldwide"
+    ? "worldwide"
+    : "group";
+
   if (!window.shared[key]) return fallbackToolSettings;
+
   return window.shared[key];
 }
 
@@ -272,10 +329,17 @@ function getSharedData() {
   const group = room.group || room;
 
   return {
-    strokes: Array.isArray(group.strokes) ? group.strokes : [],
+    strokes: Array.isArray(group.strokes)
+      ? group.strokes
+      : [],
+
     version: Number(group.version) || 0,
     turnCount: Number(group.turnCount) || 0,
-    lastAction: group.lastAction || "created"
+    lastAction: group.lastAction || "created",
+
+    versions: Array.isArray(group.versions)
+      ? group.versions
+      : []
   };
 }
 
@@ -306,6 +370,9 @@ function draw() {
   }
 
   if (activeMode === "group") {
+    // Check for newly saved versions.
+    syncVersionBubbles();
+
     drawHeader();
     drawCanvasCircle();
     drawSharedArtwork();
@@ -315,10 +382,16 @@ function draw() {
       updateWaitingBubbles();
       drawWaitingBubbles();
       drawBubblePopAnimations();
+
+      updateVersionBubbles();
+      drawVersionBubbles();
     }
 
     drawSharedToolControls();
     drawFooter();
+
+    // Draw the preview last so it appears above the interface.
+    drawVersionPreview();
   }
 }
 
@@ -330,6 +403,7 @@ function drawModeSelection() {
   const buttonWidth = min(width - 48, 360);
   const buttonHeight = 100;
   const gap = 18;
+
   const x = (width - buttonWidth) / 2;
   const totalHeight = buttonHeight * 2 + gap;
   const startY = height / 2 - totalHeight / 2 + 30;
@@ -373,6 +447,7 @@ function drawModeSelection() {
   fill(MUTED);
   textSize(11);
   textAlign(CENTER, CENTER);
+
   text(
     window.shareConnected ? "CONNECTED" : "TAP A MODE TO JOIN",
     width / 2,
@@ -382,21 +457,34 @@ function drawModeSelection() {
 
 function drawMenuCard(button, heading, description) {
   push();
+
   rectMode(CORNER);
   stroke(110, 110, 110, 180);
   strokeWeight(1);
   fill(16, 16, 16);
+
   rect(button.x, button.y, button.w, button.h, 14);
 
   noStroke();
   fill(WHITE);
   textAlign(CENTER, CENTER);
   textSize(18);
-  text(heading, button.x + button.w / 2, button.y + 35);
+
+  text(
+    heading,
+    button.x + button.w / 2,
+    button.y + 35
+  );
 
   fill(MUTED);
   textSize(12);
-  text(description, button.x + button.w / 2, button.y + 68);
+
+  text(
+    description,
+    button.x + button.w / 2,
+    button.y + 68
+  );
+
   pop();
 }
 
@@ -418,6 +506,7 @@ function drawWorldwidePlaceholder() {
 
   fill(MUTED);
   textSize(13);
+
   text(
     "Randomized drawings and prompts will appear here.",
     width / 2,
@@ -438,17 +527,25 @@ function drawWorldwidePlaceholder() {
 
 function drawSmallTextButton(button, label) {
   push();
+
   rectMode(CORNER);
   stroke(BORDER);
   strokeWeight(1);
   fill(PAPER);
+
   rect(button.x, button.y, button.w, button.h, 8);
 
   noStroke();
   fill(WHITE);
   textAlign(CENTER, CENTER);
   textSize(11);
-  text(label, button.x + button.w / 2, button.y + button.h / 2);
+
+  text(
+    label,
+    button.x + button.w / 2,
+    button.y + button.h / 2
+  );
+
   pop();
 }
 
@@ -461,8 +558,6 @@ function updateLayout() {
   const areaBottom = height - 245;
   const availableHeight = max(180, areaBottom - areaTop);
 
-  // The bubble size is fixed and does not depend on zoom.
-  // Zoom only changes the drawing rendered inside this boundary.
   const baseDiameter = max(
     180,
     min(width - 72, availableHeight * 0.88)
@@ -502,16 +597,18 @@ function updateLayout() {
     h: 25
   };
 
-  // Palette is centred above the brush controls.
   paletteButtons = [];
 
   const swatchSize = min(27, (width - 66) / 10);
+
   const swatchGap = max(
     3,
     min(8, (width - 66 - swatchSize * 8) / 7)
   );
 
-  const paletteWidth = swatchSize * 8 + swatchGap * 7;
+  const paletteWidth =
+    swatchSize * 8 + swatchGap * 7;
+
   const paletteStartX = (width - paletteWidth) / 2;
   const paletteY = height - 215;
 
@@ -573,6 +670,7 @@ function drawHeader() {
   textAlign(RIGHT, TOP);
   textSize(12);
   fill(window.shareConnected ? WHITE : MUTED);
+
   text(
     window.shareConnected ? "CONNECTED" : "CONNECTING...",
     width - 20,
@@ -583,12 +681,20 @@ function drawHeader() {
     noFill();
     stroke(BORDER);
     strokeWeight(1);
-    rect(modeButton.x, modeButton.y, modeButton.w, modeButton.h, 6);
+
+    rect(
+      modeButton.x,
+      modeButton.y,
+      modeButton.w,
+      modeButton.h,
+      6
+    );
 
     noStroke();
     fill(MUTED);
     textAlign(CENTER, CENTER);
     textSize(10);
+
     text(
       "MODES",
       modeButton.x + modeButton.w / 2,
@@ -599,8 +705,10 @@ function drawHeader() {
   textAlign(LEFT, TOP);
   fill(MUTED);
   textSize(13);
+
   text(
-    "Version " + data.version + "   ·   " + data.turnCount + " turns",
+    "Version " + data.version + "   ·   " +
+    data.turnCount + " turns",
     21,
     88
   );
@@ -608,6 +716,7 @@ function drawHeader() {
 
 function drawCanvasCircle() {
   push();
+
   noStroke();
   fill(PAPER);
   circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
@@ -616,6 +725,7 @@ function drawCanvasCircle() {
   stroke(BORDER);
   strokeWeight(1.2);
   circle(canvasArea.x, canvasArea.y, canvasArea.diameter);
+
   pop();
 
   const data = getSharedData();
@@ -625,12 +735,18 @@ function drawCanvasCircle() {
     fill(MUTED);
     textAlign(CENTER, CENTER);
     textSize(15);
-    text("A drawing will begin here.", canvasArea.x, canvasArea.y);
+
+    text(
+      "A drawing will begin here.",
+      canvasArea.x,
+      canvasArea.y
+    );
   }
 }
 
 function drawSharedArtwork() {
   const data = getSharedData();
+
   for (const strokeData of data.strokes) {
     drawStroke(strokeData);
   }
@@ -646,7 +762,9 @@ function drawLocalArtwork() {
   }
 }
 
-function drawStroke(strokeData) {
+// targetArea and zoomOverride are optional.
+// They allow an old snapshot to be drawn inside its preview bubble.
+function drawStroke(strokeData, zoomOverride, targetArea) {
   if (
     !strokeData ||
     !Array.isArray(strokeData.points) ||
@@ -656,10 +774,12 @@ function drawStroke(strokeData) {
   }
 
   const points = strokeData.points;
+  const area = targetArea || canvasArea;
 
-  // Zoom affects only the drawing's scale inside the fixed bubble.
   const zoom = constrain(
-    Number(getActiveToolSettings().zoomLevel) || MAX_ZOOM,
+    Number(zoomOverride !== undefined
+      ? zoomOverride
+      : getActiveToolSettings().zoomLevel) || MAX_ZOOM,
     MIN_ZOOM,
     MAX_ZOOM
   );
@@ -667,15 +787,16 @@ function drawStroke(strokeData) {
   push();
   drawingContext.save();
 
-  // Keep all drawing content clipped to the stationary circle.
   drawingContext.beginPath();
+
   drawingContext.arc(
-    canvasArea.x,
-    canvasArea.y,
-    canvasArea.radius,
+    area.x,
+    area.y,
+    area.radius,
     0,
     Math.PI * 2
   );
+
   drawingContext.clip();
 
   stroke(strokeData.color || WHITE);
@@ -686,12 +807,12 @@ function drawStroke(strokeData) {
 
   if (points.length === 1) {
     const px =
-      canvasArea.x +
-      (points[0].x - 0.5) * canvasArea.baseDiameter * zoom;
+      area.x +
+      (points[0].x - 0.5) * area.baseDiameter * zoom;
 
     const py =
-      canvasArea.y +
-      (points[0].y - 0.5) * canvasArea.baseDiameter * zoom;
+      area.y +
+      (points[0].y - 0.5) * area.baseDiameter * zoom;
 
     noStroke();
     fill(strokeData.color || WHITE);
@@ -701,12 +822,12 @@ function drawStroke(strokeData) {
 
     for (const point of points) {
       const px =
-        canvasArea.x +
-        (point.x - 0.5) * canvasArea.baseDiameter * zoom;
+        area.x +
+        (point.x - 0.5) * area.baseDiameter * zoom;
 
       const py =
-        canvasArea.y +
-        (point.y - 0.5) * canvasArea.baseDiameter * zoom;
+        area.y +
+        (point.y - 0.5) * area.baseDiameter * zoom;
 
       vertex(px, py);
     }
@@ -719,7 +840,7 @@ function drawStroke(strokeData) {
 }
 
 // --------------------------------------------------
-// SHARED DRAWING TOOLS — USED IN BOTH MODES
+// SHARED DRAWING TOOLS
 // --------------------------------------------------
 
 function drawSharedToolControls() {
@@ -727,7 +848,9 @@ function drawSharedToolControls() {
 
   for (let i = 0; i < paletteButtons.length; i++) {
     const button = paletteButtons[i];
-    const selected = settings.brushColor === DRAWING_PALETTE[i].color;
+
+    const selected =
+      settings.brushColor === DRAWING_PALETTE[i].color;
 
     push();
 
@@ -735,6 +858,7 @@ function drawSharedToolControls() {
       noFill();
       stroke(WHITE);
       strokeWeight(2);
+
       circle(
         button.x + button.w / 2,
         button.y + button.h / 2,
@@ -745,6 +869,7 @@ function drawSharedToolControls() {
     stroke(220, 220, 220, 100);
     strokeWeight(1);
     fill(DRAWING_PALETTE[i].color);
+
     circle(
       button.x + button.w / 2,
       button.y + button.h / 2,
@@ -755,7 +880,9 @@ function drawSharedToolControls() {
   }
 
   push();
+
   rectMode(CORNER);
+
   stroke(brushAdjustmentActive ? "#FFE66D" : BORDER);
   strokeWeight(brushAdjustmentActive ? 2 : 1);
   fill(brushAdjustmentActive ? "#29251A" : PAPER);
@@ -785,13 +912,14 @@ function drawSharedToolControls() {
 
   const ratio = constrain(
     (settings.brushSize - MIN_BRUSH_SIZE) /
-      (MAX_BRUSH_SIZE - MIN_BRUSH_SIZE),
+    (MAX_BRUSH_SIZE - MIN_BRUSH_SIZE),
     0,
     1
   );
 
   noStroke();
   fill("#444444");
+
   rect(
     brushSizeTrack.x,
     brushSizeTrack.y,
@@ -801,6 +929,7 @@ function drawSharedToolControls() {
   );
 
   fill(brushAdjustmentActive ? "#FFE66D" : WHITE);
+
   rect(
     brushSizeTrack.x,
     brushSizeTrack.y,
@@ -818,6 +947,7 @@ function drawSharedToolControls() {
   fill(MUTED);
   textAlign(LEFT, CENTER);
   textSize(10);
+
   text(
     "SIZE " + Math.round(settings.brushSize),
     brushSizeTrack.x,
@@ -830,6 +960,7 @@ function drawSharedToolControls() {
   fill(MUTED);
   textAlign(CENTER, CENTER);
   textSize(10);
+
   text(
     Math.round((settings.zoomLevel || MAX_ZOOM) * 100) + "%",
     width - 63,
@@ -839,21 +970,25 @@ function drawSharedToolControls() {
 
 function drawSmallControlButton(button, label) {
   push();
+
   rectMode(CORNER);
   stroke(BORDER);
   strokeWeight(1);
   fill(PAPER);
+
   rect(button.x, button.y, button.w, button.h, 7);
 
   noStroke();
   fill(WHITE);
   textAlign(CENTER, CENTER);
   textSize(20);
+
   text(
     label,
     button.x + button.w / 2,
     button.y + button.h / 2 - 1
   );
+
   pop();
 }
 
@@ -903,7 +1038,6 @@ function handleToolControlPress(x, y) {
     return true;
   }
 
-  // Zoom out: show more of the drawing inside the same circle.
   if (insideButton(x, y, zoomOutButton)) {
     settings.zoomLevel = max(
       MIN_ZOOM,
@@ -913,7 +1047,6 @@ function handleToolControlPress(x, y) {
     return true;
   }
 
-  // Zoom in: enlarge the drawing inside the same circle.
   if (insideButton(x, y, zoomInButton)) {
     settings.zoomLevel = min(
       MAX_ZOOM,
@@ -943,7 +1076,13 @@ function updateBrushSizeFromTilt() {
   difference = constrain(difference, -30, 30);
 
   const newSize = Math.round(
-    map(difference, -30, 30, MIN_BRUSH_SIZE, MAX_BRUSH_SIZE)
+    map(
+      difference,
+      -30,
+      30,
+      MIN_BRUSH_SIZE,
+      MAX_BRUSH_SIZE
+    )
   );
 
   const settings = getActiveToolSettings();
@@ -962,7 +1101,7 @@ function userSetupComplete() {
 }
 
 // --------------------------------------------------
-// WAITING BUBBLES
+// ORDINARY WAITING BUBBLES
 // --------------------------------------------------
 
 function createWaitingBubbles() {
@@ -975,6 +1114,7 @@ function createWaitingBubbles() {
 
 function makeWaitingBubble() {
   const size = random(25, 55);
+
   let x = width / 2;
   let y = height / 2;
   let found = false;
@@ -986,7 +1126,7 @@ function makeWaitingBubble() {
     if (
       !canvasArea ||
       dist(x, y, canvasArea.x, canvasArea.y) >
-        canvasArea.radius + size * 0.55
+      canvasArea.radius + size * 0.55
     ) {
       found = true;
       break;
@@ -1015,6 +1155,7 @@ function makeWaitingBubble() {
 function updateWaitingBubbles() {
   for (let i = 0; i < waitingBubbles.length; i++) {
     const b = waitingBubbles[i];
+
     if (b.popping) continue;
 
     b.y -= b.speed;
@@ -1030,7 +1171,7 @@ function updateWaitingBubbles() {
     if (
       canvasArea &&
       dist(b.x, b.y, canvasArea.x, canvasArea.y) <
-        canvasArea.radius + b.size * 0.55
+      canvasArea.radius + b.size * 0.55
     ) {
       b.y -= b.speed + 0.5;
     }
@@ -1050,6 +1191,7 @@ function drawWaitingBubbles() {
 
 function drawWaitingBubble(b) {
   push();
+
   translate(b.x, b.y);
   rotate(b.rotation);
 
@@ -1077,6 +1219,7 @@ function drawWaitingBubble(b) {
 
   noStroke();
   fill(255, 255, 255, 155);
+
   ellipse(
     -b.size * 0.22,
     -b.size * 0.25,
@@ -1136,6 +1279,7 @@ function drawBubblePopAnimations() {
     noFill();
     stroke(255, 255, 255, alpha);
     strokeWeight(2);
+
     circle(animation.x, animation.y, size);
 
     for (let j = 0; j < 5; j++) {
@@ -1170,6 +1314,369 @@ function drawBubblePopAnimations() {
 }
 
 // --------------------------------------------------
+// GROUP VERSION HISTORY — SHARED SNAPSHOTS
+// --------------------------------------------------
+
+function getVersionId(snapshot) {
+  if (snapshot && snapshot.id !== undefined) {
+    return String(snapshot.id);
+  }
+
+  if (snapshot && snapshot.version !== undefined) {
+    return "version-" + snapshot.version;
+  }
+
+  return null;
+}
+
+// Check the shared version list and create local bubbles
+// for any versions this participant has not encountered yet.
+function syncVersionBubbles() {
+  if (activeMode !== "group" || !window.shareConnected) return;
+
+  const data = getSharedData();
+
+  for (const snapshot of data.versions) {
+    const id = getVersionId(snapshot);
+
+    if (!id || seenVersionIds.has(id)) continue;
+
+    seenVersionIds.add(id);
+
+    versionBubbles.push(makeVersionBubble(snapshot, id));
+  }
+}
+
+function makeVersionBubble(snapshot, id) {
+  const size = random(
+    VERSION_BUBBLE_MIN_SIZE,
+    VERSION_BUBBLE_MAX_SIZE
+  );
+
+  return {
+    id,
+    snapshot,
+    x: random(size / 2 + 12, width - size / 2 - 12),
+    y: height + random(30, 100),
+    size,
+    speed: random(
+      VERSION_BUBBLE_SPEED_MIN,
+      VERSION_BUBBLE_SPEED_MAX
+    ),
+    drift: random(0.2, 0.55),
+    phase: random(360),
+    rotation: random(360),
+    rotationSpeed: random(-0.25, 0.25),
+    alpha: random(150, 210)
+  };
+}
+
+function updateVersionBubbles() {
+  for (let i = versionBubbles.length - 1; i >= 0; i--) {
+    const b = versionBubbles[i];
+
+    b.y -= b.speed;
+    b.x += sin(frameCount * 0.6 + b.phase) * b.drift;
+    b.rotation += b.rotationSpeed;
+
+    b.x = constrain(
+      b.x,
+      b.size / 2,
+      width - b.size / 2
+    );
+
+    // A version bubble disappears if it floats off the screen.
+    // The saved snapshot remains available in shared history.
+    if (b.y < -b.size) {
+      versionBubbles.splice(i, 1);
+    }
+  }
+}
+
+function drawVersionBubbles() {
+  for (const b of versionBubbles) {
+    drawVersionBubble(b);
+  }
+}
+
+function drawVersionBubble(b) {
+  push();
+
+  translate(b.x, b.y);
+  rotate(b.rotation);
+
+  noStroke();
+  fill(255, 255, 255, 12);
+  circle(0, 0, b.size);
+
+  noFill();
+  strokeWeight(2.5);
+
+  stroke(98, 214, 206, b.alpha);
+  arc(0, 0, b.size, b.size, 190, 265);
+
+  stroke(182, 155, 255, b.alpha);
+  arc(0, 0, b.size, b.size, 265, 335);
+
+  stroke(255, 156, 203, b.alpha);
+  arc(0, 0, b.size, b.size, 335, 50);
+
+  stroke(40, 123, 255, b.alpha);
+  arc(0, 0, b.size, b.size, 50, 120);
+
+  stroke(255, 230, 109, b.alpha);
+  arc(0, 0, b.size, b.size, 120, 190);
+
+  noStroke();
+  fill(255, 255, 255, 180);
+
+  ellipse(
+    -b.size * 0.22,
+    -b.size * 0.25,
+    b.size * 0.22,
+    b.size * 0.10
+  );
+
+  fill(255, 255, 255, 220);
+  textAlign(CENTER, CENTER);
+  textSize(12);
+  text("V" + b.snapshot.version, 0, 2);
+
+  pop();
+}
+
+// --------------------------------------------------
+// GROUP VERSION HISTORY — LOCAL PREVIEW
+// --------------------------------------------------
+
+function openVersionPreview(bubble) {
+  if (!bubble || activeVersionPreview) return;
+
+  const index = versionBubbles.indexOf(bubble);
+
+  if (index !== -1) {
+    versionBubbles.splice(index, 1);
+  }
+
+  activeVersionPreview = {
+    snapshot: bubble.snapshot,
+    x: bubble.x,
+    y: bubble.y,
+    startSize: bubble.size,
+    startTime: millis()
+  };
+}
+
+function drawVersionPreview() {
+  if (!activeVersionPreview) return;
+
+  const preview = activeVersionPreview;
+
+  const elapsed = millis() - preview.startTime;
+
+  const totalDuration =
+    VERSION_PREVIEW_EXPAND_TIME +
+    VERSION_PREVIEW_HOLD_TIME +
+    VERSION_PREVIEW_POP_TIME;
+
+  if (elapsed >= totalDuration) {
+    activeVersionPreview = null;
+    return;
+  }
+
+  // Capture and soften the existing interface behind the preview.
+  // This happens only while a version preview is open.
+  const blurredBackground = get();
+  blurredBackground.filter(BLUR, 2);
+  image(blurredBackground, 0, 0, width, height);
+
+  // Darken the rest of the screen.
+  noStroke();
+  fill(0, 175);
+  rect(0, 0, width, height);
+
+  const expandProgress = constrain(
+    elapsed / VERSION_PREVIEW_EXPAND_TIME,
+    0,
+    1
+  );
+
+  const easedExpansion =
+    1 - pow(1 - expandProgress, 3);
+
+  const maximumSize = min(
+    width - 48,
+    height * 0.48,
+    330
+  );
+
+  let previewSize = lerp(
+    preview.startSize,
+    maximumSize,
+    easedExpansion
+  );
+
+  // Keep the expanded preview visible while keeping it
+  // as close as possible to the original bubble position.
+  const previewX = constrain(
+    preview.x,
+    previewSize / 2 + 12,
+    width - previewSize / 2 - 12
+  );
+
+  const previewY = constrain(
+    preview.y,
+    previewSize / 2 + 45,
+    height - previewSize / 2 - 45
+  );
+
+  // Make the preview bubble shrink and fade at the end.
+  const popStart =
+    VERSION_PREVIEW_EXPAND_TIME +
+    VERSION_PREVIEW_HOLD_TIME;
+
+  if (elapsed > popStart) {
+    const popProgress = constrain(
+      (elapsed - popStart) / VERSION_PREVIEW_POP_TIME,
+      0,
+      1
+    );
+
+    previewSize *= 1 - popProgress;
+  }
+
+  const previewAlpha = elapsed > popStart
+    ? 255 * (
+        1 -
+        constrain(
+          (elapsed - popStart) / VERSION_PREVIEW_POP_TIME,
+          0,
+          1
+        )
+      )
+    : 255;
+
+  push();
+
+  // Bubble body.
+  noStroke();
+  fill(255, 255, 255, 15 * previewAlpha / 255);
+  circle(previewX, previewY, previewSize);
+
+  // Iridescent outer edge.
+  noFill();
+  strokeWeight(3);
+
+  stroke(98, 214, 206, previewAlpha);
+  arc(
+    previewX,
+    previewY,
+    previewSize,
+    previewSize,
+    190,
+    265
+  );
+
+  stroke(182, 155, 255, previewAlpha);
+  arc(
+    previewX,
+    previewY,
+    previewSize,
+    previewSize,
+    265,
+    335
+  );
+
+  stroke(255, 156, 203, previewAlpha);
+  arc(
+    previewX,
+    previewY,
+    previewSize,
+    previewSize,
+    335,
+    50
+  );
+
+  stroke(40, 123, 255, previewAlpha);
+  arc(
+    previewX,
+    previewY,
+    previewSize,
+    previewSize,
+    50,
+    120
+  );
+
+  stroke(255, 230, 109, previewAlpha);
+  arc(
+    previewX,
+    previewY,
+    previewSize,
+    previewSize,
+    120,
+    190
+  );
+
+  // Draw the saved artwork inside the expanded bubble.
+  const drawingDiameter = previewSize * 0.82;
+
+  const previewArea = {
+    x: previewX,
+    y: previewY,
+    radius: drawingDiameter / 2,
+    diameter: drawingDiameter,
+    baseDiameter: drawingDiameter
+  };
+
+  // Dark background for the old drawing.
+  noStroke();
+  fill(16, 16, 16, 235 * previewAlpha / 255);
+
+  circle(
+    previewX,
+    previewY,
+    drawingDiameter
+  );
+
+  const snapshot = preview.snapshot;
+
+  if (snapshot && Array.isArray(snapshot.strokes)) {
+    for (const strokeData of snapshot.strokes) {
+      drawStroke(
+        strokeData,
+        snapshot.zoomLevel || MAX_ZOOM,
+        previewArea
+      );
+    }
+  }
+
+  // Reapply the preview outline above the artwork.
+  noFill();
+  stroke(255, 255, 255, 160 * previewAlpha / 255);
+  strokeWeight(1.5);
+
+  circle(
+    previewX,
+    previewY,
+    drawingDiameter
+  );
+
+  // Version number above the bubble.
+  noStroke();
+  fill(255, 255, 255, previewAlpha);
+  textAlign(CENTER, CENTER);
+  textSize(17);
+
+  text(
+    "Version " + snapshot.version,
+    previewX,
+    previewY - previewSize / 2 - 22
+  );
+
+  pop();
+}
+
+// --------------------------------------------------
 // GROUP FOOTER AND TURN CONTROLS
 // --------------------------------------------------
 
@@ -1201,11 +1708,19 @@ function drawFooter() {
 function drawButton(button, label) {
   noStroke();
   fill(window.shareConnected ? WHITE : "#555555");
-  rect(button.x, button.y, button.w, button.h, 8);
+
+  rect(
+    button.x,
+    button.y,
+    button.w,
+    button.h,
+    8
+  );
 
   fill(window.shareConnected ? "#000000" : WHITE);
   textAlign(CENTER, CENTER);
   textSize(13);
+
   text(
     label,
     button.x + button.w / 2,
@@ -1224,12 +1739,15 @@ function mousePressed() {
       insideButton(mouseX, mouseY, groupMenuButton)
     ) {
       connectToShare();
+
       activeMode = "group";
       drawingMode = false;
       localStrokes = [];
       currentStroke = null;
+
       updateLayout();
       createWaitingBubbles();
+
       return;
     }
 
@@ -1261,6 +1779,10 @@ function mousePressed() {
 
   if (activeMode !== "group") return;
 
+  // While a version preview is open, taps cannot interact
+  // with the drawing or the controls underneath it.
+  if (activeVersionPreview) return;
+
   if (handleToolControlPress(mouseX, mouseY)) return;
 
   if (
@@ -1276,6 +1798,20 @@ function mousePressed() {
   if (!window.shareConnected) return;
 
   if (!drawingMode) {
+    // Check version bubbles first so they are easier to select.
+    for (let i = versionBubbles.length - 1; i >= 0; i--) {
+      const b = versionBubbles[i];
+
+      if (
+        dist(mouseX, mouseY, b.x, b.y) <
+        b.size / 2 + 12
+      ) {
+        openVersionPreview(b);
+        return;
+      }
+    }
+
+    // Ordinary floating bubbles.
     for (let i = waitingBubbles.length - 1; i >= 0; i--) {
       const b = waitingBubbles[i];
 
@@ -1299,6 +1835,7 @@ function mousePressed() {
   if (insideButton(mouseX, mouseY, rightButton)) {
     if (drawingMode) finishTurn();
     else passTurn();
+
     return;
   }
 
@@ -1322,7 +1859,8 @@ function mouseDragged() {
   if (
     activeMode !== "group" ||
     !drawingMode ||
-    !currentStroke
+    !currentStroke ||
+    activeVersionPreview
   ) {
     return;
   }
@@ -1349,7 +1887,8 @@ function mouseReleased() {
 function insideDrawingCircle(x, y) {
   return (
     canvasArea &&
-    dist(x, y, canvasArea.x, canvasArea.y) <= canvasArea.radius
+    dist(x, y, canvasArea.x, canvasArea.y) <=
+    canvasArea.radius
   );
 }
 
@@ -1374,10 +1913,8 @@ function addDrawingPoint(x, y) {
 
   const baseDiameter = canvasArea.baseDiameter;
 
-  // Do not constrain these coordinates to 0–1.
-  // When zoomed out, the visible drawing area represents a larger
-  // section of the drawing space, so points outside the original
-  // 0–1 range must be retained rather than cut off.
+  // Coordinates remain unconstrained so zooming out
+  // can reveal additional drawing space.
   const normalizedX =
     (x - canvasArea.x) / (baseDiameter * zoom) + 0.5;
 
@@ -1417,9 +1954,28 @@ function finishTurn() {
   const data = getSharedData();
 
   if (localStrokes.length > 0) {
-    group.strokes = data.strokes.concat(localStrokes);
-    group.version = data.version + 1;
+    const nextVersion = data.version + 1;
+    const nextTurn = data.turnCount + 1;
+
+    // Combine the previous shared drawing with this turn's work.
+    const completedStrokes =
+      data.strokes.concat(localStrokes);
+
+    group.strokes = completedStrokes;
+    group.version = nextVersion;
     group.lastAction = "edited";
+
+    // Save a separate copy of the completed drawing.
+    // This prevents future edits from changing old versions.
+    const snapshot = {
+      id: "version-" + nextVersion + "-turn-" + nextTurn,
+      version: nextVersion,
+      turn: nextTurn,
+      zoomLevel: Number(group.zoomLevel) || MAX_ZOOM,
+      strokes: JSON.parse(JSON.stringify(completedStrokes))
+    };
+
+    group.versions = data.versions.concat([snapshot]);
   } else {
     group.lastAction = "passed";
   }
